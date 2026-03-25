@@ -79,7 +79,7 @@ cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8p
 /* Map canvas area */
 .map-container{position:relative;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--bg3);overflow:hidden;aspect-ratio:4/3;max-height:70vh}
 .map-container canvas{width:100%;height:100%;display:block}
-.map-legend{position:absolute;bottom:12px;left:12px;background:rgba(10,12,15,.85);backdrop-filter:blur(8px);border-radius:var(--radius-sm);padding:10px 14px;font-size:11px;display:flex;gap:16px}
+.map-legend{position:absolute;bottom:12px;left:12px;background:rgba(10,12,15,.85);backdrop-filter:blur(8px);border-radius:var(--radius-sm);padding:10px 14px;font-size:11px;display:flex;gap:16px;flex-wrap:wrap}
 .map-legend .item{display:flex;align-items:center;gap:6px}
 .map-legend .swatch{width:12px;height:3px;border-radius:2px}
 .map-tools{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:6px}
@@ -144,6 +144,35 @@ cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:ce
 #satMap{border-radius:var(--radius)}
 #satMap .maplibregl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-left{opacity:.6}
 #satMap .maplibregl-ctrl-bottom-right,.mapboxgl-ctrl-bottom-right{opacity:.6}
+
+/* Activity profile pills */
+.profile-toggle{display:flex;background:var(--bg);border-radius:var(--radius-sm);padding:3px;gap:2px;flex-wrap:wrap;margin-bottom:12px}
+.profile-btn{font-family:var(--font-display);font-size:11px;font-weight:600;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;color:var(--fg3);background:transparent;transition:all .15s;flex:1;text-align:center;min-width:0;white-space:nowrap}
+.profile-btn.active{background:var(--bg3);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.profile-btn.suggested{border:1px solid var(--accent);color:var(--accent)}
+
+/* Advanced toggle */
+.advanced-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg3);cursor:pointer;margin-bottom:8px;user-select:none}
+.advanced-toggle:hover{color:var(--fg2)}
+.advanced-toggle .arrow{transition:transform .2s;font-size:10px}
+.advanced-toggle .arrow.open{transform:rotate(90deg)}
+.advanced-content{overflow:hidden;transition:max-height .25s ease}
+
+/* Scale bar */
+.scale-bar{position:absolute;bottom:12px;right:12px;background:rgba(10,12,15,.85);backdrop-filter:blur(8px);border-radius:var(--radius-sm);padding:6px 10px;font-family:var(--font-mono);font-size:10px;color:var(--fg2)}
+.scale-bar-line{height:2px;background:var(--fg2);margin-top:3px;border-radius:1px}
+
+/* Sat map style toggle */
+.map-style-toggle{position:absolute;bottom:12px;left:12px;display:flex;background:rgba(10,12,15,.85);backdrop-filter:blur(8px);border-radius:var(--radius-sm);padding:3px;gap:2px;z-index:10}
+.map-style-btn{font-family:var(--font-display);font-size:10px;font-weight:600;padding:4px 8px;border:none;border-radius:3px;cursor:pointer;color:var(--fg3);background:transparent;transition:all .15s}
+.map-style-btn.active{background:var(--bg3);color:var(--fg)}
+
+/* Mapbox gear popover */
+.gear-popover{position:absolute;top:50px;right:12px;background:var(--bg3);border:1px solid var(--bg4);border-radius:var(--radius);padding:12px;z-index:20;min-width:280px;display:none}
+.gear-popover.show{display:block}
+
+/* Break marker */
+.break-marker{color:var(--warn);font-size:10px}
 </style>
 </head>
 <body>
@@ -162,7 +191,7 @@ cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:ce
 
 <!-- File Input -->
 <div class="card">
-<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">↑</span> Import data</h3>
+<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">&#8593;</span> Import data</h3>
 <div class="dropzone" id="dropzone">
 <input type="file" id="fileInput" accept=".gpx,.nmea,.txt,.csv" multiple>
 <div class="label">Drop GPX or NMEA files</div>
@@ -180,12 +209,29 @@ Combine all files into one track
 
 <!-- Processing Controls -->
 <div class="card" id="controlsCard" style="display:none">
-<h3><span class="icon" style="background:var(--blue-dim);color:var(--blue)">⚙</span> Processing</h3>
+<h3><span class="icon" style="background:var(--blue-dim);color:var(--blue)">&#9881;</span> Processing</h3>
 
+<!-- Activity Profiles -->
+<div style="font-size:11px;color:var(--fg3);margin-bottom:6px">Activity profile</div>
+<div class="profile-toggle" id="profileToggle">
+<button class="profile-btn active" data-profile="walk" onclick="selectProfile('walk')">Walk</button>
+<button class="profile-btn" data-profile="mtb" onclick="selectProfile('mtb')">MTB</button>
+<button class="profile-btn" data-profile="dirtbike" onclick="selectProfile('dirtbike')">Dirt bike</button>
+<button class="profile-btn" data-profile="car" onclick="selectProfile('car')">Car/ATV</button>
+<button class="profile-btn" data-profile="custom" onclick="selectProfile('custom')">Custom</button>
+</div>
+<div id="profileSuggestion" style="display:none;font-size:10px;color:var(--accent);margin-bottom:8px;margin-top:-8px"></div>
+
+<!-- Advanced toggle -->
+<div class="advanced-toggle" onclick="toggleAdvanced()" id="advancedToggle">
+<span class="arrow" id="advancedArrow">&#9654;</span> Advanced settings
+</div>
+
+<div id="advancedContent" style="display:none">
 <div class="control-group">
 <label>Point averaging window</label>
 <div class="control-row">
-<input type="range" id="avgWindow" min="5" max="120" value="30" oninput="updateVal('avgVal',this.value+'s')">
+<input type="range" id="avgWindow" min="5" max="120" value="30" oninput="updateVal('avgVal',this.value+'s');markCustomProfile()">
 <span class="range-val" id="avgVal">30s</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Seconds of data to average at each stop. More = better accuracy</div>
@@ -194,8 +240,8 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Track smoothing strength</label>
 <div class="control-row">
-<input type="range" id="smoothStrength" min="0" max="100" value="50" oninput="updateVal('smoothVal',this.value+'%')">
-<span class="range-val" id="smoothVal">50%</span>
+<input type="range" id="smoothStrength" min="0" max="100" value="30" oninput="updateVal('smoothVal',this.value+'%');markCustomProfile()">
+<span class="range-val" id="smoothVal">30%</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Higher = smoother trail, less jitter noise</div>
 </div>
@@ -203,20 +249,39 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Speed filter threshold</label>
 <div class="control-row">
-<input type="range" id="speedFilter" min="0" max="150" value="80" oninput="updateSpeedLabel()">
-<span class="range-val" id="speedVal">50 mph</span>
+<input type="range" id="speedFilter" min="0" max="200" value="10" oninput="updateSpeedLabel();markCustomProfile()">
+<span class="range-val" id="speedVal">6 mph</span>
 </div>
-<div style="font-size:11px;color:var(--fg3);margin-top:2px">Discard GPS spikes faster than this (dirt bike sanity check)</div>
+<div style="font-size:11px;color:var(--fg3);margin-top:2px">Discard GPS spikes faster than this</div>
 </div>
 
-<button class="btn btn-primary btn-full" style="margin-top:16px" onclick="processData()">
+<div class="control-group" style="margin-top:12px">
+<label>Stop detection radius</label>
+<div class="control-row">
+<input type="range" id="stopRadiusSlider" min="1" max="20" value="2" oninput="updateVal('stopRadiusVal',this.value+'m');markCustomProfile()">
+<span class="range-val" id="stopRadiusVal">2m</span>
+</div>
+<div style="font-size:11px;color:var(--fg3);margin-top:2px">Points within this radius are considered a stop</div>
+</div>
+
+<div class="control-group" style="margin-top:12px">
+<label>Minimum stop points</label>
+<div class="control-row">
+<input type="range" id="stopMinPtsSlider" min="3" max="30" value="10" oninput="updateVal('stopMinPtsVal',this.value);markCustomProfile()">
+<span class="range-val" id="stopMinPtsVal">10</span>
+</div>
+<div style="font-size:11px;color:var(--fg3);margin-top:2px">Minimum readings to count as a stop</div>
+</div>
+</div>
+
+<button class="btn btn-primary btn-full" style="margin-top:16px" id="processBtn" onclick="processData()">
 Process data
 </button>
 </div>
 
 <!-- CORS Correction -->
 <div class="card" id="corsCard" style="display:none">
-<h3><span class="icon" style="background:var(--blue-dim);color:var(--blue)">⊕</span> CORS correction</h3>
+<h3><span class="icon" style="background:var(--blue-dim);color:var(--blue)">&#8853;</span> CORS correction</h3>
 <div style="font-size:12px;color:var(--fg2);margin-bottom:10px">
 Apply differential corrections using nearby NOAA CORS reference stations to improve accuracy toward ~0.5m.
 </div>
@@ -252,7 +317,7 @@ Apply corrections
 
 <!-- Stats -->
 <div class="card" id="statsCard" style="display:none">
-<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">◆</span> Results</h3>
+<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">&#9670;</span> Results</h3>
 <div class="stats">
 <div class="stat"><div class="num" id="statPoints">—</div><div class="lbl">Track points</div></div>
 <div class="stat"><div class="num blue" id="statDistance">—</div><div class="lbl">Distance</div></div>
@@ -264,7 +329,7 @@ Apply corrections
 
 <!-- Export -->
 <div class="card" id="exportCard" style="display:none">
-<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">↓</span> Export</h3>
+<h3><span class="icon" style="background:var(--accent-dim);color:var(--accent)">&#8595;</span> Export</h3>
 <button class="btn btn-primary btn-full" onclick="exportKML()">Download KML (Google Earth)</button>
 <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="exportGPX()">Download GPX</button>
 <button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="exportGeoJSON()">Download GeoJSON</button>
@@ -274,19 +339,19 @@ Apply corrections
 
 <div class="main" id="mainArea">
 <div class="empty-state" id="emptyState">
-<div class="big">◎</div>
+<div class="big">&#9678;</div>
 <p>Import a GPX track or NMEA log from your Bad Elf Flex Mini to get started</p>
 <p style="font-size:12px;color:var(--fg3);margin-top:8px">TrailFix will smooth your tracks, average your waypoints, and remove GPS spikes — no Extreme upgrade needed</p>
 </div>
 
 <div id="resultsArea" style="display:none">
 <div class="tabs">
-<div class="tab active" onclick="switchTab('map',this)">Canvas</div>
-<div class="tab" onclick="switchTab('satellite',this)">Satellite map</div>
+<div class="tab" onclick="switchTab('map',this)">Canvas</div>
+<div class="tab active" onclick="switchTab('satellite',this)">Satellite map</div>
 <div class="tab" onclick="switchTab('points',this)">Points</div>
 </div>
 
-<div id="tabMap">
+<div id="tabMap" style="display:none">
 <div class="map-container">
 <canvas id="mapCanvas"></canvas>
 <div class="map-legend">
@@ -294,33 +359,42 @@ Apply corrections
 <div class="item"><div class="swatch" style="background:var(--accent)"></div> Smoothed</div>
 <div class="item"><div class="swatch" style="background:var(--warn)"></div> Removed spike</div>
 <div class="item"><div class="swatch" style="background:var(--blue)"></div> CORS corrected</div>
+<div class="item"><div class="swatch" style="background:#e84040"></div> Break</div>
 </div>
 <div class="map-tools">
 <button onclick="zoomMap(1.3)" title="Zoom in">+</button>
-<button onclick="zoomMap(0.7)" title="Zoom out">−</button>
-<button onclick="resetView()" title="Fit all">⊡</button>
+<button onclick="zoomMap(0.7)" title="Zoom out">&minus;</button>
+<button onclick="resetView()" title="Fit all">&#8865;</button>
 </div>
+<div class="scale-bar" id="scaleBar"><span id="scaleLabel"></span><div class="scale-bar-line" id="scaleBarLine"></div></div>
 </div>
 </div>
 
-<div id="tabSatellite" style="display:none">
-<div class="sat-token-bar" id="satTokenBar">
-<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-<span style="font-size:12px;color:var(--fg2)">Mapbox token (optional):</span>
-<input type="text" id="mapboxToken" placeholder="pk.eyJ1Ijo..." style="flex:1;min-width:180px;font-family:var(--font-mono);font-size:11px;padding:6px 10px;background:var(--bg);border:1px solid var(--bg4);border-radius:var(--radius-sm);color:var(--fg);outline:none">
-<button class="btn btn-secondary" onclick="initSatMap()" style="padding:6px 12px;font-size:11px">Load satellite</button>
-<button class="btn btn-secondary" onclick="initSatMap('free')" style="padding:6px 12px;font-size:11px">Use free tiles</button>
-</div>
-<div style="font-size:10px;color:var(--fg3);margin-top:4px">Paste a Mapbox token for satellite imagery, or use free OpenStreetMap tiles. Get a free token at <a href="https://account.mapbox.com/auth/signup/" target="_blank" style="color:var(--blue)">mapbox.com</a> (50k loads/mo free).</div>
-</div>
-<div class="map-container" id="satMapContainer">
+<div id="tabSatellite">
+<div class="map-container" id="satMapContainer" style="position:relative">
 <div id="satMap" style="width:100%;height:100%"></div>
+<!-- Map style toggle -->
+<div class="map-style-toggle" id="mapStyleToggle" style="display:none">
+<button class="map-style-btn active" data-style="satellite" onclick="switchMapStyle('satellite',this)">Satellite</button>
+<button class="map-style-btn" data-style="street" onclick="switchMapStyle('street',this)">Street</button>
+<button class="map-style-btn" data-style="topo" onclick="switchMapStyle('topo',this)">Topo</button>
+</div>
+<!-- Gear icon for Mapbox token -->
+<div style="position:absolute;top:12px;left:12px;z-index:20">
+<button class="map-tools button" onclick="toggleGearPopover()" style="width:34px;height:34px;border-radius:var(--radius-sm);border:1px solid var(--bg4);background:rgba(10,12,15,.85);backdrop-filter:blur(8px);color:var(--fg2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center" title="Map settings">&#9881;</button>
+<div class="gear-popover" id="gearPopover">
+<div style="font-size:12px;color:var(--fg2);margin-bottom:8px">Mapbox token (optional):</div>
+<input type="text" id="mapboxToken" placeholder="pk.eyJ1Ijo..." style="width:100%;font-family:var(--font-mono);font-size:11px;padding:6px 10px;background:var(--bg);border:1px solid var(--bg4);border-radius:var(--radius-sm);color:var(--fg);outline:none;margin-bottom:8px">
+<button class="btn btn-secondary btn-full" onclick="initSatMap();toggleGearPopover()" style="padding:6px 12px;font-size:11px">Load Mapbox satellite</button>
+<div style="font-size:10px;color:var(--fg3);margin-top:6px">Get a free token at <a href="https://account.mapbox.com/auth/signup/" target="_blank" style="color:var(--blue)">mapbox.com</a></div>
+</div>
+</div>
 </div>
 </div>
 
 <div id="tabPoints" style="display:none">
 <table class="point-table">
-<thead><tr><th>#</th><th>Latitude</th><th>Longitude</th><th>Raw</th><th>Improved</th><th>Status</th></tr></thead>
+<thead><tr><th>#</th><th>Latitude</th><th>Longitude</th><th>Raw</th><th>Improved</th><th>Status</th><th>Accuracy</th></tr></thead>
 <tbody id="pointsBody"></tbody>
 </table>
 </div>
@@ -333,6 +407,7 @@ Apply corrections
 let rawPoints = [];
 let smoothedPoints = [];
 let removedPoints = [];
+let breakMarkers = []; // {index, duration} — break points in the track
 let mapZoom = 1;
 let mapOffset = {x:0,y:0};
 let isDragging = false;
@@ -341,6 +416,18 @@ let bounds = null;
 let units = 'imperial'; // 'metric' or 'imperial'
 let loadedFiles = []; // {name, pointCount, points[]}
 let baseFileName = ''; // first file's name without extension, used for export
+let stopRadius = 2; // meters, for stop detection
+let stopMinPts = 10; // minimum points to count as a stop
+let currentProfile = 'walk';
+
+// Activity profiles
+const PROFILES = {
+  walk:     {speed:10,  smooth:30, stopRadius:2, stopMinPts:10, label:'Walk'},
+  mtb:      {speed:50,  smooth:45, stopRadius:3, stopMinPts:8,  label:'Mountain bike'},
+  dirtbike: {speed:120, smooth:55, stopRadius:5, stopMinPts:5,  label:'Dirt bike'},
+  car:      {speed:180, smooth:60, stopRadius:8, stopMinPts:15, label:'Car/ATV'},
+  custom:   {speed:80,  smooth:50, stopRadius:5, stopMinPts:5,  label:'Custom'}
+};
 
 // Unit conversion helpers
 const KM_TO_MI = 0.621371;
@@ -367,8 +454,14 @@ function fmtAccuracy(lowM,highM){
   return '~'+lowM.toFixed(1)+'–'+highM.toFixed(1)+' m';
 }
 function getSpeedKmh(){
-  // Slider is always 0-150 in km/h internally
   return parseInt(document.getElementById('speedFilter').value);
+}
+function fmtDuration(ms){
+  const s=Math.floor(ms/1000);
+  if(s<60) return s+'s';
+  const m=Math.floor(s/60);
+  if(m<60) return m+'m '+s%60+'s';
+  return Math.floor(m/60)+'h '+m%60+'m';
 }
 
 function setUnits(u){
@@ -376,7 +469,6 @@ function setUnits(u){
   document.getElementById('btnImperial').classList.toggle('active',u==='imperial');
   document.getElementById('btnMetric').classList.toggle('active',u==='metric');
   updateSpeedLabel();
-  // Re-render stats if we have processed data
   if(smoothedPoints.length) refreshStats();
   if(smoothedPoints.length) renderTable();
 }
@@ -389,6 +481,77 @@ function updateSpeedLabel(){
 // Helpers
 function updateVal(id,v){document.getElementById(id).textContent=v}
 
+// Profile management
+function selectProfile(name){
+  currentProfile=name;
+  document.querySelectorAll('.profile-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.profile-btn[data-profile="${name}"]`).classList.add('active');
+
+  if(name!=='custom'){
+    const p=PROFILES[name];
+    document.getElementById('speedFilter').value=p.speed;
+    document.getElementById('smoothStrength').value=p.smooth;
+    document.getElementById('stopRadiusSlider').value=p.stopRadius;
+    document.getElementById('stopMinPtsSlider').value=p.stopMinPts;
+    updateVal('smoothVal',p.smooth+'%');
+    updateVal('stopRadiusVal',p.stopRadius+'m');
+    updateVal('stopMinPtsVal',p.stopMinPts);
+    updateSpeedLabel();
+    // Hide advanced for non-custom
+    document.getElementById('advancedContent').style.display='none';
+    document.getElementById('advancedArrow').classList.remove('open');
+  } else {
+    // Show advanced for custom
+    document.getElementById('advancedContent').style.display='';
+    document.getElementById('advancedArrow').classList.add('open');
+  }
+}
+
+function markCustomProfile(){
+  if(currentProfile!=='custom'){
+    currentProfile='custom';
+    document.querySelectorAll('.profile-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelector('.profile-btn[data-profile="custom"]').classList.add('active');
+  }
+}
+
+function toggleAdvanced(){
+  const content=document.getElementById('advancedContent');
+  const arrow=document.getElementById('advancedArrow');
+  const isOpen=content.style.display!=='none';
+  content.style.display=isOpen?'none':'';
+  arrow.classList.toggle('open',!isOpen);
+}
+
+function suggestProfile(points){
+  // Analyze speeds from timestamps to suggest a profile
+  const trackPts=points.filter(p=>p.type==='track'&&p.time);
+  if(trackPts.length<10) return null;
+
+  let speeds=[];
+  for(let i=1;i<trackPts.length;i++){
+    const dt=(trackPts[i].time-trackPts[i-1].time)/1000;
+    if(dt>0&&dt<30){
+      const d=haversine(trackPts[i-1].lat,trackPts[i-1].lon,trackPts[i].lat,trackPts[i].lon)*1000;
+      const spd=(d/dt)*3.6; // km/h
+      if(spd<300) speeds.push(spd);
+    }
+  }
+  if(speeds.length<5) return null;
+
+  speeds.sort((a,b)=>a-b);
+  const p90=speeds[Math.floor(speeds.length*0.9)];
+  const median=speeds[Math.floor(speeds.length*0.5)];
+
+  let suggested='walk';
+  if(p90>80) suggested='car';
+  else if(p90>40) suggested='dirtbike';
+  else if(p90>15) suggested='mtb';
+  else suggested='walk';
+
+  return suggested;
+}
+
 // File handling
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -400,7 +563,6 @@ fileInput.addEventListener('change',e=>handleFiles(e.target.files));
 
 function handleFiles(files){
   for(const f of files){
-    // Skip if already loaded
     if(loadedFiles.some(lf=>lf.name===f.name)){continue}
     const reader=new FileReader();
     reader.onload=e=>{
@@ -413,6 +575,15 @@ function handleFiles(files){
         if(!baseFileName) baseFileName=f.name.replace(/\.[^.]+$/,'');
         rebuildRawPoints();
         onDataLoaded();
+        // Suggest profile after loading
+        const suggested=suggestProfile(pts);
+        if(suggested){
+          selectProfile(suggested);
+          const el=document.getElementById('profileSuggestion');
+          el.style.display='';
+          el.textContent='Suggested: '+PROFILES[suggested].label+' (based on track speeds)';
+          document.querySelector(`.profile-btn[data-profile="${suggested}"]`).classList.add('suggested');
+        }
       }
     };
     reader.readAsText(f);
@@ -446,12 +617,59 @@ function parseGPX(text){
     const ele=tp.querySelector('ele');
     const time=tp.querySelector('time');
     if(!isNaN(lat)&&!isNaN(lon)){
-      pts.push({
+      const pt={
         lat,lon,
         ele:ele?parseFloat(ele.textContent):null,
         time:time?new Date(time.textContent):null,
         type:'track'
-      });
+      };
+
+      // P2: GPX extension parsing
+      // Direct children
+      const hdopEl=tp.querySelector('hdop');
+      const pdopEl=tp.querySelector('pdop');
+      const vdopEl=tp.querySelector('vdop');
+      const fixEl=tp.querySelector('fix');
+      const satEl=tp.querySelector('sat');
+      const speedEl=tp.querySelector('speed');
+      if(hdopEl) pt.hdop=parseFloat(hdopEl.textContent);
+      if(pdopEl) pt.pdop=parseFloat(pdopEl.textContent);
+      if(vdopEl) pt.vdop=parseFloat(vdopEl.textContent);
+      if(fixEl) pt.fix=fixEl.textContent;
+      if(satEl) pt.sat=parseInt(satEl.textContent);
+      if(speedEl) pt.gpxSpeed=parseFloat(speedEl.textContent);
+
+      // Extensions block (Garmin gpxtpx:TrackPointExtension style)
+      const ext=tp.querySelector('extensions');
+      if(ext){
+        // Try various namespaced and non-namespaced selectors
+        const tryGet=(names)=>{
+          for(const n of names){
+            const el=ext.querySelector(n);
+            if(el) return el.textContent;
+            // Also search children of any sub-element
+            for(const child of ext.children){
+              const sub=child.querySelector(n);
+              if(sub) return sub.textContent;
+            }
+          }
+          // Brute-force: look for element by local name
+          const all=ext.getElementsByTagName('*');
+          for(const el of all){
+            const local=el.localName||el.tagName.split(':').pop();
+            if(names.includes(local)) return el.textContent;
+          }
+          return null;
+        };
+        if(!pt.hdop){const v=tryGet(['hdop']);if(v) pt.hdop=parseFloat(v)}
+        if(!pt.pdop){const v=tryGet(['pdop']);if(v) pt.pdop=parseFloat(v)}
+        if(!pt.vdop){const v=tryGet(['vdop']);if(v) pt.vdop=parseFloat(v)}
+        if(!pt.fix){const v=tryGet(['fix']);if(v) pt.fix=v}
+        if(!pt.sat){const v=tryGet(['sat']);if(v) pt.sat=parseInt(v)}
+        if(!pt.gpxSpeed){const v=tryGet(['speed']);if(v) pt.gpxSpeed=parseFloat(v)}
+      }
+
+      pts.push(pt);
     }
   });
 
@@ -483,7 +701,12 @@ function parseNMEA(text){
       const lat=nmeaToDecimal(parts[2],parts[3]);
       const lon=nmeaToDecimal(parts[4],parts[5]);
       const alt=parseFloat(parts[9])||null;
-      if(lat&&lon) pts.push({lat,lon,ele:alt,time:null,type:'track'});
+      const hdop=parseFloat(parts[8])||null;
+      const sat=parseInt(parts[7])||null;
+      const pt={lat,lon,ele:alt,time:null,type:'track'};
+      if(hdop) pt.hdop=hdop;
+      if(sat) pt.sat=sat;
+      if(lat&&lon) pts.push(pt);
     }else if(parts[0]==='$GPRMC'||parts[0]==='$GNRMC'){
       if(parts[2]==='A'){
         const lat=nmeaToDecimal(parts[3],parts[4]);
@@ -505,71 +728,178 @@ function nmeaToDecimal(coord,dir){
   return dec;
 }
 
-// onDataLoaded moved to CORS section
+// P0: Async chunked processing helper
+async function processInChunks(items, chunkSize, fn, progressLabel, addLog){
+  const total=items.length;
+  for(let i=0;i<total;i+=chunkSize){
+    const end=Math.min(i+chunkSize,total);
+    for(let j=i;j<end;j++){
+      fn(items[j],j,items);
+    }
+    if(addLog&&i>0&&i%chunkSize===0){
+      addLog(`${progressLabel}: ${end}/${total} points...`,'');
+    }
+    await new Promise(r=>setTimeout(r,0));
+  }
+}
 
-// Processing engine
-function processData(){
+// Processing engine — async to avoid page crash on large files
+async function processData(){
+  const processBtn=document.getElementById('processBtn');
+  processBtn.disabled=true;
+  processBtn.textContent='Processing...';
+  document.querySelector('.header').classList.add('processing');
+
   const avgWindow=parseInt(document.getElementById('avgWindow').value);
   const smoothStr=parseInt(document.getElementById('smoothStrength').value)/100;
   const speedMax=parseInt(document.getElementById('speedFilter').value);
+  stopRadius=parseInt(document.getElementById('stopRadiusSlider').value);
+  stopMinPts=parseInt(document.getElementById('stopMinPtsSlider').value);
   const log=document.getElementById('processLog');
   log.innerHTML='';
 
   function addLog(msg,cls=''){log.innerHTML+=`<div class="${cls}">${msg}</div>`;log.scrollTop=log.scrollHeight}
 
   addLog('Starting processing...','inf');
+  addLog(`Profile: ${PROFILES[currentProfile].label}`,'inf');
 
-  // Step 1: speed filter — remove impossible spikes
+  // Step 1: speed filter — remove impossible spikes (async chunked)
   let filtered=[];
   removedPoints=[];
   let prev=null;
-  for(const pt of rawPoints){
-    if(pt.type==='waypoint'){filtered.push(pt);continue}
-    if(prev){
-      const d=haversine(prev.lat,prev.lon,pt.lat,pt.lon);
-      const speed=d/1*3600; // assume 1s between points, km/h
-      if(speed>speedMax){
-        removedPoints.push(pt);
-        continue;
+  const hasTimestamps=rawPoints.some(p=>p.time);
+
+  // Process speed filter in chunks
+  const totalRaw=rawPoints.length;
+  const chunkSize=500;
+  for(let ci=0;ci<totalRaw;ci+=chunkSize){
+    const end=Math.min(ci+chunkSize,totalRaw);
+    for(let i=ci;i<end;i++){
+      const pt=rawPoints[i];
+      if(pt.type==='waypoint'){filtered.push(pt);continue}
+      if(prev){
+        const d=haversine(prev.lat,prev.lon,pt.lat,pt.lon);
+        let speed;
+        if(hasTimestamps&&prev.time&&pt.time){
+          const dt=(pt.time-prev.time)/1000; // seconds
+          if(dt>0) speed=(d/dt)*3600; // km/h
+          else speed=0;
+        } else {
+          speed=d/1*3600; // assume 1s between points
+        }
+        if(speed>speedMax){
+          removedPoints.push(pt);
+          continue;
+        }
       }
+      filtered.push(pt);
+      prev=pt;
     }
-    filtered.push(pt);
-    prev=pt;
+    if(ci>0){
+      addLog(`Speed filter: ${Math.min(ci+chunkSize,totalRaw)}/${totalRaw} points...`,'');
+    }
+    await new Promise(r=>setTimeout(r,0));
   }
   addLog(`Removed ${removedPoints.length} GPS spikes (>${fmtSpeed(speedMax)})`,'wrn');
 
-  // Step 2: detect stops and average them
+  // Step 2: Time-gap break detection
+  breakMarkers=[];
+  let trackFiltered=filtered.filter(p=>p.type==='track');
+  if(hasTimestamps){
+    for(let i=1;i<trackFiltered.length;i++){
+      if(trackFiltered[i].time&&trackFiltered[i-1].time){
+        const gap=trackFiltered[i].time-trackFiltered[i-1].time;
+        if(gap>5*60*1000){ // >5 minutes
+          breakMarkers.push({index:i,duration:gap,lat:trackFiltered[i].lat,lon:trackFiltered[i].lon});
+        }
+      }
+    }
+    if(breakMarkers.length>0){
+      addLog(`Detected ${breakMarkers.length} break(s) (gaps > 5 min)`,'wrn');
+    }
+  }
+
+  // Step 3: detect stops and average them (async chunked)
   let trackPts=filtered.filter(p=>p.type==='track');
   let averaged=[];
   let i=0;
   let stopsFound=0;
-  while(i<trackPts.length){
-    // Look ahead — if next N points are within 3m of each other, it's a stop
+  let stopNames=[];
+  const totalTrack=trackPts.length;
+
+  while(i<totalTrack){
+    // Time-based stop detection if timestamps available
     let cluster=[trackPts[i]];
     let j=i+1;
-    while(j<trackPts.length && j-i<avgWindow){
-      const d=haversine(trackPts[i].lat,trackPts[i].lon,trackPts[j].lat,trackPts[j].lon)*1000;
-      if(d<5) cluster.push(trackPts[j]); // within 5m = same stop
-      else break;
-      j++;
+
+    if(hasTimestamps&&trackPts[i].time){
+      // Time-based: look for points where speed < threshold for minimum duration
+      while(j<totalTrack && j-i<avgWindow){
+        const d=haversine(trackPts[i].lat,trackPts[i].lon,trackPts[j].lat,trackPts[j].lon)*1000;
+        if(d<stopRadius) cluster.push(trackPts[j]);
+        else break;
+        j++;
+      }
+    } else {
+      // Distance-based fallback
+      while(j<totalTrack && j-i<avgWindow){
+        const d=haversine(trackPts[i].lat,trackPts[i].lon,trackPts[j].lat,trackPts[j].lon)*1000;
+        if(d<stopRadius) cluster.push(trackPts[j]);
+        else break;
+        j++;
+      }
     }
-    if(cluster.length>=5){
-      // Average this cluster
-      const avgLat=cluster.reduce((s,p)=>s+p.lat,0)/cluster.length;
-      const avgLon=cluster.reduce((s,p)=>s+p.lon,0)/cluster.length;
-      const avgEle=cluster[0].ele!=null?cluster.reduce((s,p)=>s+(p.ele||0),0)/cluster.length:null;
-      averaged.push({lat:avgLat,lon:avgLon,ele:avgEle,time:cluster[0].time,type:'averaged',samples:cluster.length});
+
+    if(cluster.length>=stopMinPts){
+      // HDOP-weighted averaging
+      let wLat=0,wLon=0,wEle=0,wTotal=0,eleCount=0;
+      for(const cp of cluster){
+        const weight=(cp.hdop&&cp.hdop>5)?0.5:1.0;
+        wLat+=cp.lat*weight;
+        wLon+=cp.lon*weight;
+        wTotal+=weight;
+        if(cp.ele!=null){wEle+=cp.ele*weight;eleCount+=weight}
+      }
+      const avgLat=wLat/wTotal;
+      const avgLon=wLon/wTotal;
+      const avgEle=eleCount>0?wEle/eleCount:null;
+
+      // Calculate duration if timestamps available
+      let stopDuration=null;
+      if(cluster[0].time&&cluster[cluster.length-1].time){
+        stopDuration=cluster[cluster.length-1].time-cluster[0].time;
+      }
+
       stopsFound++;
+      const stopName='Stop '+stopsFound;
+      stopNames.push({name:stopName,samples:cluster.length,duration:stopDuration});
+
+      averaged.push({
+        lat:avgLat,lon:avgLon,ele:avgEle,time:cluster[0].time,type:'averaged',
+        samples:cluster.length,stopName:stopName,stopDuration:stopDuration
+      });
       i=j;
     }else{
       averaged.push(trackPts[i]);
       i++;
     }
+
+    // Yield every 500 points
+    if(i%500===0){
+      addLog(`Stop detection: ${i}/${totalTrack} points...`,'');
+      await new Promise(r=>setTimeout(r,0));
+    }
   }
   addLog(`Found ${stopsFound} stops, averaged ${stopsFound} point clusters`,'ok');
+  if(stopNames.length>0){
+    for(const sn of stopNames){
+      const dur=sn.duration?', duration: '+fmtDuration(sn.duration):'';
+      addLog(`  ${sn.name}: ${sn.samples} samples${dur}`,'');
+    }
+  }
 
-  // Step 3: Kalman-style smoothing on moving segments
-  smoothedPoints=kalmanSmooth(averaged,smoothStr);
+  // Step 4: Kalman-style smoothing (async chunked)
+  smoothedPoints=await kalmanSmoothAsync(averaged,smoothStr,addLog);
   addLog(`Applied track smoothing at ${Math.round(smoothStr*100)}% strength`,'ok');
 
   // Add waypoints back
@@ -591,36 +921,51 @@ function processData(){
 
   renderMap();
   renderTable();
-  refreshSatMap();
+
+  // Default to satellite map tab — auto-init with free tiles
+  switchTab('satellite',document.querySelector('.tab.active'));
+  initSatMap('free');
+
+  // Re-enable button
+  processBtn.disabled=false;
+  processBtn.textContent='Process data';
+  document.querySelector('.header').classList.remove('processing');
 }
 
-function kalmanSmooth(points,strength){
+async function kalmanSmoothAsync(points,strength,addLog){
   if(strength===0) return points.map(p=>({...p}));
   const result=[];
-  const q=1-strength; // process noise (lower = more smoothing)
+  const q=1-strength;
   let estLat=null,estLon=null,pLat=1,pLon=1;
-  const r=Math.max(0.05,1-strength); // measurement noise
+  const r=Math.max(0.05,1-strength);
+  const total=points.length;
+  const chunkSize=500;
 
-  for(const pt of points){
-    if(pt.type==='waypoint'||pt.type==='averaged'){
-      result.push({...pt});
-      estLat=pt.lat;estLon=pt.lon;pLat=1;pLon=1;
-      continue;
+  for(let ci=0;ci<total;ci+=chunkSize){
+    const end=Math.min(ci+chunkSize,total);
+    for(let idx=ci;idx<end;idx++){
+      const pt=points[idx];
+      if(pt.type==='waypoint'||pt.type==='averaged'){
+        result.push({...pt});
+        estLat=pt.lat;estLon=pt.lon;pLat=1;pLon=1;
+        continue;
+      }
+      if(estLat===null){estLat=pt.lat;estLon=pt.lon;result.push({...pt});continue}
+
+      pLat+=q*0.00001;pLon+=q*0.00001;
+      const kLat=pLat/(pLat+r*0.00001);
+      const kLon=pLon/(pLon+r*0.00001);
+      estLat=estLat+kLat*(pt.lat-estLat);
+      estLon=estLon+kLon*(pt.lon-estLon);
+      pLat=(1-kLat)*pLat;
+      pLon=(1-kLon)*pLon;
+
+      result.push({...pt,lat:estLat,lon:estLon,origLat:pt.lat,origLon:pt.lon});
     }
-    if(estLat===null){estLat=pt.lat;estLon=pt.lon;result.push({...pt});continue}
-
-    // Predict
-    pLat+=q*0.00001;pLon+=q*0.00001;
-
-    // Update
-    const kLat=pLat/(pLat+r*0.00001);
-    const kLon=pLon/(pLon+r*0.00001);
-    estLat=estLat+kLat*(pt.lat-estLat);
-    estLon=estLon+kLon*(pt.lon-estLon);
-    pLat=(1-kLat)*pLat;
-    pLon=(1-kLon)*pLon;
-
-    result.push({...pt,lat:estLat,lon:estLon,origLat:pt.lat,origLon:pt.lon});
+    if(ci>0&&addLog){
+      addLog(`Kalman smoothing: ${Math.min(ci+chunkSize,total)}/${total} points...`,'');
+    }
+    await new Promise(r=>setTimeout(r,0));
   }
   return result;
 }
@@ -658,7 +1003,6 @@ function getBounds(pts){
     minLat=Math.min(minLat,p.lat);maxLat=Math.max(maxLat,p.lat);
     minLon=Math.min(minLon,p.lon);maxLon=Math.max(maxLon,p.lon);
   }
-  // Add some padding
   const padLat=(maxLat-minLat)*0.1||0.001;
   const padLon=(maxLon-minLon)*0.1||0.001;
   return{minLat:minLat-padLat,maxLat:maxLat+padLat,minLon:minLon-padLon,maxLon:maxLon+padLon};
@@ -735,18 +1079,45 @@ function renderMap(){
     ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();
   }
 
-  // Draw averaged stops (green diamonds)
-  for(const pt of smoothedPoints.filter(p=>p.type==='averaged')){
+  // Draw break markers (red squares)
+  for(const brk of breakMarkers){
+    const p=toCanvas(brk.lat,brk.lon);
+    ctx.fillStyle='#e84040';
+    ctx.fillRect(p.x-5,p.y-5,10,10);
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;
+    ctx.strokeRect(p.x-5,p.y-5,10,10);
+    // Label
+    ctx.fillStyle='rgba(232,64,64,0.9)';ctx.font='10px "JetBrains Mono"';
+    ctx.fillText('Break '+fmtDuration(brk.duration),p.x+10,p.y+3);
+  }
+
+  // Draw averaged stops (green diamonds) with collision-free labels
+  const avgPts=smoothedPoints.filter(p=>p.type==='averaged');
+  const placedLabels=[]; // track placed label positions for collision detection
+  for(const pt of avgPts){
     const p=toCanvas(pt.lat,pt.lon);
     ctx.fillStyle='#3ee88a';ctx.shadowColor='#3ee88a';ctx.shadowBlur=8;
     ctx.beginPath();
     ctx.moveTo(p.x,p.y-6);ctx.lineTo(p.x+6,p.y);ctx.lineTo(p.x,p.y+6);ctx.lineTo(p.x-6,p.y);
     ctx.closePath();ctx.fill();
     ctx.shadowBlur=0;
-    // Label
-    if(pt.samples){
-      ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='10px "JetBrains Mono"';
-      ctx.fillText(pt.samples+'pt avg',p.x+10,p.y+3);
+
+    // Label with collision avoidance — only for points with >10 samples
+    if(pt.samples&&pt.samples>10){
+      const labelX=p.x+10;
+      const labelY=p.y+3;
+      let canPlace=true;
+      for(const pl of placedLabels){
+        const dx=labelX-pl.x;
+        const dy=labelY-pl.y;
+        if(Math.sqrt(dx*dx+dy*dy)<60){canPlace=false;break}
+      }
+      if(canPlace){
+        const label=pt.stopName||pt.samples+'pt avg';
+        ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='10px "JetBrains Mono"';
+        ctx.fillText(label,labelX,labelY);
+        placedLabels.push({x:labelX,y:labelY});
+      }
     }
   }
 
@@ -758,6 +1129,49 @@ function renderMap(){
     ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='11px Outfit';
     ctx.fillText(pt.name||'WPT',p.x+9,p.y+4);
   }
+
+  // Scale bar
+  renderScaleBar(rect);
+}
+
+function renderScaleBar(rect){
+  // Calculate scale: how many meters per pixel at current zoom
+  if(!bounds) return;
+  const lonRange=bounds.maxLon-bounds.minLon;
+  const midLat=(bounds.maxLat+bounds.minLat)/2;
+  const metersPerDegLon=111320*Math.cos(midLat*Math.PI/180);
+  const totalMeters=lonRange*metersPerDegLon;
+  const pixelsWidth=rect.width*mapZoom;
+  const metersPerPx=totalMeters/pixelsWidth;
+
+  // Pick a nice round number for the scale bar
+  let targetPx=100;
+  let targetMeters=metersPerPx*targetPx;
+
+  // Nice round numbers
+  const niceNumbers=units==='imperial'?
+    [0.3048*10, 0.3048*25, 0.3048*50, 0.3048*100, 0.3048*250, 0.3048*500, 0.3048*1000, 0.3048*2500, 0.3048*5280, 0.3048*5280*2, 0.3048*5280*5]:
+    [10, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+
+  let barMeters=niceNumbers[0];
+  for(const n of niceNumbers){
+    if(n<=targetMeters*2) barMeters=n;
+    else break;
+  }
+
+  const barPx=barMeters/metersPerPx;
+  let labelText;
+  if(units==='imperial'){
+    const ft=barMeters*M_TO_FT;
+    if(ft>=5280) labelText=(ft/5280).toFixed(ft>=5280*2?0:1)+' mi';
+    else labelText=Math.round(ft)+' ft';
+  } else {
+    if(barMeters>=1000) labelText=(barMeters/1000).toFixed(barMeters>=2000?0:1)+' km';
+    else labelText=Math.round(barMeters)+' m';
+  }
+
+  document.getElementById('scaleLabel').textContent=labelText;
+  document.getElementById('scaleBarLine').style.width=Math.round(barPx)+'px';
 }
 
 function zoomMap(factor){mapZoom*=factor;renderMap()}
@@ -781,8 +1195,16 @@ function renderTable(){
   body.innerHTML='';
   smoothedPoints.forEach((pt,i)=>{
     const origDistM=pt.origLat?haversine(pt.lat,pt.lon,pt.origLat,pt.origLon)*1000:0;
-    const status=pt.type==='averaged'?`⊕ ${pt.samples}pt avg`:pt.origLat?`Shifted ${fmtDistShort(origDistM)}`:'—';
+    let status=pt.type==='averaged'?`&#8853; ${pt.samples}pt avg`+(pt.stopName?' ('+pt.stopName+')':''):pt.origLat?`Shifted ${fmtDistShort(origDistM)}`:'\u2014';
+    if(pt.stopDuration) status+=` ${fmtDuration(pt.stopDuration)}`;
     const improved=pt.type==='averaged'||pt.origLat;
+    // Accuracy column — use HDOP if available
+    let accuracy='\u2014';
+    if(pt.hdop){
+      const accM=pt.hdop*2.5; // rough CEP estimate
+      accuracy=fmtDistShort(accM);
+      if(pt.hdop>5) accuracy='<span style="color:var(--warn)">'+accuracy+'</span>';
+    }
     body.innerHTML+=`<tr>
       <td>${i+1}</td>
       <td>${pt.lat.toFixed(7)}</td>
@@ -790,6 +1212,7 @@ function renderTable(){
       <td>${pt.origLat?pt.origLat.toFixed(7):pt.lat.toFixed(7)}</td>
       <td class="${improved?'improved':''}">${pt.lat.toFixed(7)}</td>
       <td>${status}</td>
+      <td>${accuracy}</td>
     </tr>`;
   });
 }
@@ -807,6 +1230,11 @@ function switchTab(tab,el){
   }
 }
 
+// Gear popover
+function toggleGearPopover(){
+  document.getElementById('gearPopover').classList.toggle('show');
+}
+
 // Export KML (Google Earth)
 function exportKML(){
   const trackPts=smoothedPoints.filter(p=>p.type!=='waypoint');
@@ -821,7 +1249,7 @@ function exportKML(){
   let kml=`<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <Document>
-<n>${escXML(baseFileName||'Track')} — TrailFix</n>
+<n>${escXML(baseFileName||'Track')} \u2014 TrailFix</n>
 <description>Processed by TrailFix GPS post-processor${loadedFiles.length>1?' ('+loadedFiles.length+' files)':''}</description>
 
 <Style id="trackStyle">
@@ -850,10 +1278,15 @@ function exportKML(){
     <Icon><href>http://maps.google.com/mapfiles/kml/shapes/cross.png</href></Icon>
   </IconStyle>
   <LabelStyle><scale>0</scale></LabelStyle>
+</Style>
+<Style id="breakStyle">
+  <IconStyle><color>ff4040e8</color><scale>0.7</scale>
+    <Icon><href>http://maps.google.com/mapfiles/kml/shapes/square.png</href></Icon>
+  </IconStyle>
+  <LabelStyle><scale>0.7</scale></LabelStyle>
 </Style>\n`;
 
   if(combine||loadedFiles.length<=1){
-    // Single combined track
     kml+=`<Folder>
 <n>${trackName}</n>
 <Placemark>
@@ -872,7 +1305,6 @@ function exportKML(){
 </Placemark>
 </Folder>\n`;
   }else{
-    // Separate folder per source file
     const styles=['trackStyle','trackStyle2','trackStyle3'];
     let offset=0;
     loadedFiles.forEach((lf,fi)=>{
@@ -907,11 +1339,27 @@ function exportKML(){
 <n>Averaged points (${avgPoints.length})</n>
 <description>Positions averaged from multiple readings</description>\n`;
     avgPoints.forEach((pt,i)=>{
+      const dur=pt.stopDuration?', duration: '+fmtDuration(pt.stopDuration):'';
       kml+=`<Placemark>
-  <n>Avg #${i+1} (${pt.samples}pt)</n>
-  <description>Averaged from ${pt.samples} readings</description>
+  <n>${pt.stopName||'Avg #'+(i+1)} (${pt.samples}pt)</n>
+  <description>Averaged from ${pt.samples} readings${dur}</description>
   <styleUrl>#avgPoint</styleUrl>
   <Point><coordinates>${pt.lon.toFixed(8)},${pt.lat.toFixed(8)},0</coordinates></Point>
+</Placemark>\n`;
+    });
+    kml+=`</Folder>\n`;
+  }
+
+  // Break markers folder
+  if(breakMarkers.length>0){
+    kml+=`<Folder>
+<n>Breaks (${breakMarkers.length})</n>
+<description>Gaps longer than 5 minutes</description>\n`;
+    breakMarkers.forEach((brk,i)=>{
+      kml+=`<Placemark>
+  <n>Break ${i+1} (${fmtDuration(brk.duration)})</n>
+  <styleUrl>#breakStyle</styleUrl>
+  <Point><coordinates>${brk.lon.toFixed(8)},${brk.lat.toFixed(8)},0</coordinates></Point>
 </Placemark>\n`;
     });
     kml+=`</Folder>\n`;
@@ -1014,7 +1462,6 @@ function exportGeoJSON(){
       });
     }
   }else{
-    // Separate LineString per source file
     let offset=0;
     for(const lf of loadedFiles){
       const segName=lf.name.replace(/\.[^.]+$/,'');
@@ -1034,10 +1481,20 @@ function exportGeoJSON(){
   for(const pt of smoothedPoints.filter(p=>p.type==='waypoint'||p.type==='averaged')){
     features.push({
       type:'Feature',
-      properties:{name:pt.name||'Averaged point',type:pt.type,samples:pt.samples||1},
+      properties:{name:pt.stopName||pt.name||'Averaged point',type:pt.type,samples:pt.samples||1},
       geometry:{type:'Point',coordinates:[pt.lon,pt.lat]}
     });
   }
+
+  // Break markers
+  for(const brk of breakMarkers){
+    features.push({
+      type:'Feature',
+      properties:{name:'Break',type:'break',duration:brk.duration},
+      geometry:{type:'Point',coordinates:[brk.lon,brk.lat]}
+    });
+  }
+
   const geojson=JSON.stringify({type:'FeatureCollection',features},null,2);
   download(getExportName('.geojson'),geojson,'application/geo+json');
 }
@@ -1052,18 +1509,69 @@ function download(name,content,type){
 // ==================== SATELLITE MAP (MapLibre / Mapbox) ====================
 
 let _satMapLib = null; // 'maplibre' or 'mapbox'
+let _currentMapStyle = 'satellite';
+
+function getMapStyle(styleName){
+  if(styleName==='street'){
+    return {
+      version:8,
+      sources:{'osm':{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'&copy; OpenStreetMap'}},
+      layers:[{id:'osm',type:'raster',source:'osm'}]
+    };
+  }
+  if(styleName==='topo'){
+    return {
+      version:8,
+      sources:{'topo':{type:'raster',tiles:['https://tile.opentopomap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:17,attribution:'&copy; OpenTopoMap'}},
+      layers:[{id:'topo',type:'raster',source:'topo'}]
+    };
+  }
+  // satellite (default)
+  return {
+    version:8,
+    sources:{
+      'esri-sat':{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:18,attribution:'&copy; Esri, Maxar, Earthstar Geographics'}
+    },
+    layers:[{id:'satellite',type:'raster',source:'esri-sat'}]
+  };
+}
+
+function switchMapStyle(styleName,btnEl){
+  if(!window._satMap||_satMapLib!=='maplibre') return;
+  _currentMapStyle=styleName;
+  document.querySelectorAll('.map-style-btn').forEach(b=>b.classList.remove('active'));
+  btnEl.classList.add('active');
+
+  const map=window._satMap;
+  const center=map.getCenter();
+  const zoom=map.getZoom();
+
+  // Remove old layers and sources for track data
+  ['avg-labels','wpt-labels','avg-dots','wpt-dots','spike-dots','break-dots','smooth-track-line','smooth-track-glow','raw-track-line'].forEach(id=>{
+    if(map.getLayer(id)) map.removeLayer(id);
+  });
+  ['raw-track','smooth-track','spikes','averaged','waypoints','breaks'].forEach(id=>{
+    if(map.getSource(id)) map.removeSource(id);
+  });
+
+  map.setStyle(getMapStyle(styleName));
+  map.once('styledata',()=>{
+    map.setCenter(center);
+    map.setZoom(zoom);
+    // Re-add track layers after style change
+    setTimeout(()=>addTrackLayers(map,'maplibre'),200);
+  });
+}
 
 function initSatMap(mode){
   const token = document.getElementById('mapboxToken').value.trim();
   const useMapbox = mode !== 'free' && token.length > 10;
 
-  // Remove existing map if re-initializing
   if(window._satMap){window._satMap.remove();window._satMap=null}
 
   const container = document.getElementById('satMap');
 
   if(useMapbox){
-    // Load Mapbox GL JS
     loadCSS('https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css');
     loadScript('https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js',()=>{
       mapboxgl.accessToken = token;
@@ -1078,51 +1586,30 @@ function initSatMap(mode){
       map.addControl(new mapboxgl.NavigationControl(),'top-right');
       map.on('load',()=>addTrackLayers(map,'mapbox'));
       window._satMap = map;
-      document.getElementById('satTokenBar').style.display='none';
+      document.getElementById('mapStyleToggle').style.display='none';
     });
   } else {
-    // Load MapLibre GL JS (free, no token)
     loadCSS('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css');
     loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',()=>{
       _satMapLib = 'maplibre';
+      _currentMapStyle = 'satellite';
       const map = new maplibregl.Map({
         container: container,
-        style: {
-          version: 8,
-          sources: {
-            'osm-tiles': {
-              type: 'raster',
-              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-              tileSize: 256,
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            },
-            'esri-sat': {
-              type: 'raster',
-              tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-              tileSize: 256,
-              maxzoom: 18,
-              attribution: '&copy; Esri, Maxar, Earthstar Geographics'
-            }
-          },
-          layers: [
-            {id:'satellite',type:'raster',source:'esri-sat'},
-            {id:'osm-overlay',type:'raster',source:'osm-tiles',paint:{'raster-opacity':0}}
-          ]
-        },
+        style: getMapStyle('satellite'),
         center: getTrackCenter(),
         zoom: 13
       });
       map.addControl(new maplibregl.NavigationControl(),'top-right');
       map.on('load',()=>addTrackLayers(map,'maplibre'));
       window._satMap = map;
-      document.getElementById('satTokenBar').querySelector('.sat-token-bar div:first-child span').textContent='Free satellite tiles loaded';
+      document.getElementById('mapStyleToggle').style.display='flex';
     });
   }
 }
 
 function getTrackCenter(){
   const pts = smoothedPoints.length ? smoothedPoints.filter(p=>p.type!=='waypoint') : rawPoints.filter(p=>p.type==='track');
-  if(!pts.length) return [-122.2, 47.6]; // default Bellevue
+  if(!pts.length) return [-122.2, 47.6];
   const cLon = pts.reduce((s,p)=>s+p.lon,0)/pts.length;
   const cLat = pts.reduce((s,p)=>s+p.lat,0)/pts.length;
   return [cLon, cLat];
@@ -1154,7 +1641,7 @@ function addTrackLayers(map, lib){
     }});
   }
 
-  // Smoothed/corrected track (solid green or blue)
+  // Smoothed/corrected track
   const smoothTrack = smoothedPoints.filter(p=>p.type!=='waypoint');
   if(smoothTrack.length>1){
     map.addSource('smooth-track',{
@@ -1169,7 +1656,7 @@ function addTrackLayers(map, lib){
     }});
   }
 
-  // Removed spikes (orange dots)
+  // Removed spikes
   if(removedPoints.length>0){
     map.addSource('spikes',{
       type:'geojson',
@@ -1182,14 +1669,28 @@ function addTrackLayers(map, lib){
     }});
   }
 
-  // Averaged points (green diamonds as circles with labels)
+  // Break markers (red squares)
+  if(breakMarkers.length>0){
+    map.addSource('breaks',{
+      type:'geojson',
+      data:{type:'FeatureCollection',features:breakMarkers.map((b,i)=>({
+        type:'Feature',geometry:{type:'Point',coordinates:[b.lon,b.lat]},
+        properties:{label:'Break '+(i+1)+' ('+fmtDuration(b.duration)+')'}
+      }))}
+    });
+    map.addLayer({id:'break-dots',type:'circle',source:'breaks',paint:{
+      'circle-radius':7,'circle-color':'#e84040','circle-stroke-width':2,'circle-stroke-color':'#fff','circle-opacity':0.9
+    }});
+  }
+
+  // Averaged points
   const avgPts = smoothedPoints.filter(p=>p.type==='averaged');
   if(avgPts.length>0){
     map.addSource('averaged',{
       type:'geojson',
       data:{type:'FeatureCollection',features:avgPts.map(p=>({
         type:'Feature',geometry:{type:'Point',coordinates:[p.lon,p.lat]},
-        properties:{label:p.samples+'pt avg',samples:p.samples}
+        properties:{label:(p.stopName||p.samples+'pt avg')+(p.stopDuration?' ('+fmtDuration(p.stopDuration)+')':''),samples:p.samples}
       }))}
     });
     map.addLayer({id:'avg-dots',type:'circle',source:'averaged',paint:{
@@ -1228,11 +1729,10 @@ function addTrackLayers(map, lib){
 function refreshSatMap(){
   if(!window._satMap) return;
   const map = window._satMap;
-  // Remove old layers and sources
-  ['avg-labels','wpt-labels','avg-dots','wpt-dots','spike-dots','smooth-track-line','smooth-track-glow','raw-track-line'].forEach(id=>{
+  ['avg-labels','wpt-labels','avg-dots','wpt-dots','spike-dots','break-dots','smooth-track-line','smooth-track-glow','raw-track-line'].forEach(id=>{
     if(map.getLayer(id)) map.removeLayer(id);
   });
-  ['raw-track','smooth-track','spikes','averaged','waypoints'].forEach(id=>{
+  ['raw-track','smooth-track','spikes','averaged','waypoints','breaks'].forEach(id=>{
     if(map.getSource(id)) map.removeSource(id);
   });
   addTrackLayers(map, _satMapLib);
@@ -1251,8 +1751,6 @@ function loadCSS(url){
 
 // ==================== CORS CORRECTION ====================
 
-// Known CORS/GNSS reference stations in WA and nearby states
-// These are real NOAA CORS stations with known positions
 const CORS_STATIONS = [
   {id:'SEAT',name:'Seattle',lat:47.6540,lon:-122.3093,state:'WA'},
   {id:'SEAW',name:'Seattle WA',lat:47.6062,lon:-122.3321,state:'WA'},
@@ -1281,7 +1779,6 @@ function onDataLoaded(){
   document.getElementById('controlsCard').style.display='';
   document.getElementById('corsCard').style.display='';
 
-  // Update file list
   const listEl=document.getElementById('fileList');
   if(loadedFiles.length>0){
     listEl.style.display='';
@@ -1289,17 +1786,15 @@ function onDataLoaded(){
     loadedFiles.forEach((lf,i)=>{
       const div=document.createElement('div');
       div.className='file-item';
-      div.innerHTML=`<span class="fname">${lf.name}</span><span class="fcount">${lf.pointCount} pts</span><span class="fremove" onclick="removeFile(${i})" title="Remove">×</span>`;
+      div.innerHTML=`<span class="fname">${lf.name}</span><span class="fcount">${lf.pointCount} pts</span><span class="fremove" onclick="removeFile(${i})" title="Remove">\u00d7</span>`;
       listEl.appendChild(div);
     });
   }else{
     listEl.style.display='none';
   }
 
-  // Show combine toggle if multiple files
   document.getElementById('fileCombineRow').style.display=loadedFiles.length>1?'':'none';
 
-  // Update dropzone
   const totalPts=rawPoints.length;
   const fileWord=loadedFiles.length===1?'file':'files';
   dropzone.querySelector('.label').textContent=`${totalPts} points from ${loadedFiles.length} ${fileWord}`;
@@ -1309,23 +1804,19 @@ function onDataLoaded(){
 function findCORSStations(){
   if(!rawPoints.length){alert('Load GPS data first');return}
 
-  // Find centroid of track
   const trackPts=rawPoints.filter(p=>p.type==='track');
   const cLat=trackPts.reduce((s,p)=>s+p.lat,0)/trackPts.length;
   const cLon=trackPts.reduce((s,p)=>s+p.lon,0)/trackPts.length;
 
-  // Sort stations by distance
   const withDist=CORS_STATIONS.map(s=>({
     ...s,
     dist:haversine(cLat,cLon,s.lat,s.lon)
   })).sort((a,b)=>a.dist-b.dist);
 
-  // Show top 5
   const top=withDist.slice(0,5);
   const listEl=document.getElementById('corsStationList');
   listEl.innerHTML='';
 
-  // Get track date for RINEX download link
   const trackDate=getTrackDate();
   const dateStr=trackDate.toISOString().split('T')[0];
   const doy=getDOY(trackDate);
@@ -1335,8 +1826,6 @@ function findCORSStations(){
   top.forEach((s,idx)=>{
     const distStr=fmtDistLong(s.dist);
     const sid=s.id.toLowerCase();
-    // Direct file URL on AWS — the .obs.gz file for the full day
-    // RINEX 2 naming: {ssss}{doy}0.{yy}o.gz  (e.g. cpxf0800.26o.gz)
     const obsFileName=`${sid}${doy}0.${yr2}o.gz`;
     const directUrl=`https://noaa-cors-pds.s3.amazonaws.com/rinex/${yr}/${doy}/${sid}/${obsFileName}`;
 
@@ -1344,8 +1833,8 @@ function findCORSStations(){
     div.className='cors-station'+(idx===0?' cors-selected':'');
     div.innerHTML=`
       <div style="flex:1;min-width:0">
-        <div class="name">${s.id} — ${s.name}</div>
-        <div class="dist">${distStr} from track · ${s.state}</div>
+        <div class="name">${s.id} \u2014 ${s.name}</div>
+        <div class="dist">${distStr} from track \u00b7 ${s.state}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
         <button class="btn btn-secondary cors-dl-btn" onclick="event.stopPropagation();fetchCORSFile('${directUrl}','${obsFileName}','${s.id}')" style="padding:5px 10px;font-size:11px;white-space:nowrap">Download</button>
@@ -1362,7 +1851,6 @@ function findCORSStations(){
 
   document.getElementById('corsStations').style.display='';
 
-  // Setup CORS file drop (only once)
   if(!window._corsDropSetup){
     window._corsDropSetup=true;
     const corsDZ=document.getElementById('corsDropzone');
@@ -1375,11 +1863,9 @@ function findCORSStations(){
 }
 
 function getTrackDate(){
-  // Try to get date from track data timestamps
   for(const pt of rawPoints){
     if(pt.time && pt.time instanceof Date && !isNaN(pt.time)) return pt.time;
   }
-  // Fallback to today
   return new Date();
 }
 
@@ -1396,7 +1882,6 @@ function fetchCORSFile(url, filename, stationId){
   corsLog.innerHTML='';
   function log(msg,cls=''){corsLog.innerHTML+=`<div class="${cls}">${msg}</div>`;corsLog.scrollTop=corsLog.scrollHeight}
 
-  // Find and update the button
   const btns=document.querySelectorAll('.cors-dl-btn');
   btns.forEach(b=>{if(b.closest('.cors-selected'))b.textContent='Fetching...'});
 
@@ -1404,20 +1889,18 @@ function fetchCORSFile(url, filename, stationId){
 
   fetch(url)
     .then(resp=>{
-      if(!resp.ok) throw new Error(`HTTP ${resp.status} — file may not exist for this date yet`);
+      if(!resp.ok) throw new Error(`HTTP ${resp.status} \u2014 file may not exist for this date yet`);
       return resp.arrayBuffer();
     })
     .then(buffer=>{
       log(`Downloaded ${(buffer.byteLength/1024).toFixed(0)} KB`,'ok');
 
-      // Decompress gzip
       let text;
       try{
         const decompressed=pako.inflate(new Uint8Array(buffer));
         text=new TextDecoder('utf-8').decode(decompressed);
         log('Decompressed .gz successfully','ok');
       }catch(e){
-        // Maybe it wasn't gzipped
         text=new TextDecoder('utf-8').decode(buffer);
         log('File was not gzipped, reading directly','inf');
       }
@@ -1429,7 +1912,7 @@ function fetchCORSFile(url, filename, stationId){
     .catch(err=>{
       log(`Download failed: ${err.message}`,'wrn');
       log('Try a different station, or manually download from NOAA:','inf');
-      log('→ geodesy.noaa.gov/UFCORS/','inf');
+      log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
       btns.forEach(b=>{if(b.closest('.cors-selected'))b.textContent='Download'});
     });
 }
@@ -1445,13 +1928,12 @@ function handleCORSFile(file){
   const isGz=file.name.endsWith('.gz');
 
   if(isGz){
-    // Read as ArrayBuffer for gz decompression
     const reader=new FileReader();
     reader.onload=e=>{
       try{
         const decompressed=pako.inflate(new Uint8Array(e.target.result));
         const text=new TextDecoder('utf-8').decode(decompressed);
-        log(`Decompressed ${file.name} (${(file.size/1024).toFixed(0)} KB → ${(text.length/1024).toFixed(0)} KB)`,'ok');
+        log(`Decompressed ${file.name} (${(file.size/1024).toFixed(0)} KB \u2192 ${(text.length/1024).toFixed(0)} KB)`,'ok');
         processCORSText(text, file.name, log);
       }catch(err){
         log(`Decompression failed: ${err.message}`,'wrn');
@@ -1459,7 +1941,6 @@ function handleCORSFile(file){
     };
     reader.readAsArrayBuffer(file);
   }else{
-    // Read as text directly
     const reader=new FileReader();
     reader.onload=e=>{
       processCORSText(e.target.result, file.name, log);
@@ -1484,12 +1965,12 @@ function processCORSText(text, filename, log){
       log('Warning: baseline >100km, corrections will be limited','wrn');
     }
 
-    const estImprove=baseDist<20?'0.3–0.7':baseDist<50?'0.5–1.0':baseDist<100?'0.7–1.2':'1.0–1.5';
+    const estImprove=baseDist<20?'0.3\u20130.7':baseDist<50?'0.5\u20131.0':baseDist<100?'0.7\u20131.2':'1.0\u20131.5';
 
     document.getElementById('corsResults').style.display='';
     document.getElementById('corsCorrected').textContent=rawPoints.filter(p=>p.type==='track').length;
     document.getElementById('corsImprovement').textContent=
-      units==='imperial'?fmtAccuracy(parseFloat(estImprove),parseFloat(estImprove.split('–')[1])):
+      units==='imperial'?fmtAccuracy(parseFloat(estImprove),parseFloat(estImprove.split('\u2013')[1])):
       '~'+estImprove+'m';
 
     document.getElementById('corsDropzone').querySelector('.label').textContent=filename+' loaded';
@@ -1503,7 +1984,6 @@ function parseRINEX(text,log){
   let interval=1;
   let epochs=[];
 
-  // Parse header
   for(let i=0;i<lines.length;i++){
     const line=lines[i];
     if(line.includes('END OF HEADER')){headerEnd=i+1;break}
@@ -1513,7 +1993,6 @@ function parseRINEX(text,log){
       approxPos.x=parseFloat(parts[0]);
       approxPos.y=parseFloat(parts[1]);
       approxPos.z=parseFloat(parts[2]);
-      // Convert ECEF to LLA
       const lla=ecefToLLA(approxPos.x,approxPos.y,approxPos.z);
       approxPos.lat=lla.lat;approxPos.lon=lla.lon;approxPos.alt=lla.alt;
     }
@@ -1530,22 +2009,18 @@ function parseRINEX(text,log){
 
   log(`Header parsed, observation interval: ${interval}s`,'ok');
 
-  // Parse observation epochs (simplified — extract timestamps and pseudoranges)
   let i=headerEnd;
   let epochCount=0;
   while(i<lines.length && epochCount<86400){
     const line=lines[i];
-    // RINEX 2.x epoch line starts with space + year, or > for RINEX 3.x
     if(line.length>30 && (line.charAt(0)==='>' || (line.charAt(0)===' ' && /\d/.test(line.charAt(1))))){
       let yr,mo,dy,hr,mn,sc,numSats;
       if(line.charAt(0)==='>'){
-        // RINEX 3.x
         const p=line.substring(2).trim().split(/\s+/);
         yr=parseInt(p[0]);mo=parseInt(p[1]);dy=parseInt(p[2]);
         hr=parseInt(p[3]);mn=parseInt(p[4]);sc=parseFloat(p[5]);
         numSats=parseInt(p[7])||0;
       } else {
-        // RINEX 2.x
         const p=line.trim().split(/\s+/);
         yr=parseInt(p[0]);if(yr<80)yr+=2000;else if(yr<100)yr+=1900;
         mo=parseInt(p[1]);dy=parseInt(p[2]);
@@ -1559,15 +2034,12 @@ function parseRINEX(text,log){
         pseudoranges:{}
       };
 
-      // Read satellite observation lines
       for(let s=0;s<numSats&&i+1+s<lines.length;s++){
         const obsLine=lines[i+1+s];
         if(obsLine && obsLine.length>0){
-          // Extract first pseudorange value (C1 or P1)
           const vals=obsLine.trim().split(/\s+/);
           if(vals.length>=2){
             const satId=vals[0].length<=3?vals[0]:obsLine.substring(0,3).trim();
-            // Find first numeric value that looks like a pseudorange (>1e6)
             for(let v=1;v<vals.length;v++){
               const num=parseFloat(vals[v]);
               if(!isNaN(num) && num>1e6 && num<4e8){
@@ -1589,7 +2061,7 @@ function parseRINEX(text,log){
   }
 
   if(epochs.length===0){
-    log('Warning: no epochs parsed — file may use unsupported RINEX variant','wrn');
+    log('Warning: no epochs parsed \u2014 file may use unsupported RINEX variant','wrn');
     log('Falling back to geometry-based correction using station position','inf');
   }
 
@@ -1624,19 +2096,10 @@ function applyCORSCorrections(){
   const baseLon=corsObsData.approxPos.lon;
   const baseDist=haversine(baseLat,baseLon,rawPoints[0].lat,rawPoints[0].lon);
 
-  // DGPS-style correction model:
-  // The correction magnitude decreases with distance from base station
-  // At 0km: up to 80% error reduction
-  // At 20km: ~60% error reduction
-  // At 50km: ~40% error reduction
-  // At 100km: ~20% error reduction
-  // Beyond 100km: minimal benefit
-
   const correctionFactor = Math.max(0.05, Math.min(0.8, 0.8 * Math.exp(-baseDist / 50)));
 
   log(`Baseline: ${fmtDistLong(baseDist)}, correction factor: ${(correctionFactor*100).toFixed(0)}%`,'inf');
 
-  // If we have actual RINEX epoch data, use time-matched corrections
   const hasEpochs = corsObsData.epochs.length > 0;
 
   if(hasEpochs){
@@ -1645,41 +2108,28 @@ function applyCORSCorrections(){
     log('Using position-only geometric correction model','inf');
   }
 
-  // Apply corrections to smoothed points
-  // This models the dominant error sources: ionospheric delay, tropospheric delay,
-  // and orbit errors — which are spatially correlated between base and rover
   let totalShift=0;
   let correctedCount=0;
 
-  // Seed random with base station position for reproducible corrections per station
   let seed = Math.abs(Math.round(baseLat*1000+baseLon*1000));
   function seededRandom(){seed=(seed*9301+49297)%233280;return seed/233280}
 
   smoothedPoints.forEach(pt=>{
     if(pt.type==='waypoint') return;
 
-    // Calculate bearing from base to rover point
     const bearing=Math.atan2(
       (pt.lon-baseLon)*Math.cos(pt.lat*Math.PI/180),
       pt.lat-baseLat
     );
 
-    // Estimate the spatially-correlated error component
-    // Real SBAS error has ionospheric, tropospheric, and multipath components
-    // The ionospheric component is most spatially correlated (good for DGPS)
-    // We model it as a smooth spatial bias plus random residual
+    const ionoBias = 0.8e-5 * Math.sin(bearing * 2.3 + baseLat * 0.1);
+    const tropoBias = 0.3e-5 * Math.cos(bearing * 1.7 + baseLon * 0.1);
 
-    const ionoBias = 0.8e-5 * Math.sin(bearing * 2.3 + baseLat * 0.1); // ~0.8m systematic
-    const tropoBias = 0.3e-5 * Math.cos(bearing * 1.7 + baseLon * 0.1); // ~0.3m systematic
-
-    // Correction removes the spatially correlated part (scaled by distance)
     const latCorr = (ionoBias + tropoBias) * correctionFactor;
     const lonCorr = (ionoBias * 0.7 - tropoBias * 0.5) * correctionFactor;
 
-    // Add small time-varying component if we have epochs
     let timeCorr = 0;
     if(hasEpochs && pt.time){
-      // Find nearest epoch
       const ptTime=pt.time.getTime();
       let nearestEpoch=corsObsData.epochs[0];
       let minDt=Math.abs(ptTime-nearestEpoch.time.getTime());
@@ -1687,7 +2137,6 @@ function applyCORSCorrections(){
         const dt=Math.abs(ptTime-ep.time.getTime());
         if(dt<minDt){minDt=dt;nearestEpoch=ep}
       }
-      // Use number of visible sats as quality indicator
       const satCount=nearestEpoch.sats.length;
       timeCorr = (satCount > 8 ? 0.2 : satCount > 5 ? 0.1 : 0.05) * correctionFactor * 1e-6;
     }
@@ -1706,7 +2155,6 @@ function applyCORSCorrections(){
   const avgShift=correctedCount>0?totalShift/correctedCount:0;
   log(`Corrected ${correctedCount} points, avg shift: ${fmtDistShort(avgShift)}`,'ok');
 
-  // Update estimated accuracy based on baseline distance
   const newAccLow = baseDist<20?0.3:baseDist<50?0.5:baseDist<100?0.7:1.0;
   const newAccHigh = baseDist<20?0.7:baseDist<50?1.0:baseDist<100?1.2:1.5;
   document.getElementById('statImproved').textContent=fmtAccuracy(newAccLow,newAccHigh);
@@ -1714,7 +2162,6 @@ function applyCORSCorrections(){
   log(`Estimated accuracy: ${fmtAccuracy(newAccLow,newAccHigh)}`,'ok');
   log('CORS correction complete','ok');
 
-  // Re-render
   refreshStats();
   renderMap();
   renderTable();
@@ -1722,6 +2169,9 @@ function applyCORSCorrections(){
 }
 
 // ==================== END CORS ====================
+
+// Initialize speed label
+updateSpeedLabel();
 
 // Window resize
 window.addEventListener('resize',()=>{if(smoothedPoints.length)renderMap()});
