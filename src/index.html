@@ -129,6 +129,9 @@ cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:ce
 .cors-station a{font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap}
 .cors-station a:hover{text-decoration:underline}
 .cors-selected{border:1px solid var(--blue);background:var(--blue-dim)}
+.cors-loaded{position:relative}
+.cors-loaded::after{content:'';position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.cors-network-info{font-size:11px;color:var(--fg2);background:var(--bg2);border-radius:var(--radius-sm);padding:8px 10px;margin-top:8px}
 .cors-dl-btn{transition:all .15s !important}
 .cors-dl-btn:hover{background:var(--blue) !important;color:#fff !important}
 
@@ -293,7 +296,7 @@ Find nearby CORS stations
 </div>
 
 <div id="corsStations" style="display:none;margin-top:10px">
-<div style="font-size:11px;color:var(--fg3);margin-bottom:6px">Nearest stations — click download to get the file, then drop it below:</div>
+<div style="font-size:11px;color:var(--fg3);margin-bottom:6px">Nearest stations — download one or more for better accuracy:</div>
 <div id="corsStationList"></div>
 <div class="dropzone" id="corsDropzone" style="margin-top:10px;padding:20px 16px">
 <input type="file" id="corsFileInput" accept=".obs,.o,.rnx,.gz,.24o,.25o,.26o">
@@ -303,6 +306,7 @@ Find nearby CORS stations
 </div>
 
 <div id="corsResults" style="display:none;margin-top:10px">
+<div id="corsNetworkInfo" class="cors-network-info" style="display:none"></div>
 <div class="stats" style="margin-top:0">
 <div class="stat"><div class="num" id="corsCorrected">—</div><div class="lbl">Points corrected</div></div>
 <div class="stat"><div class="num" id="corsImprovement">—</div><div class="lbl">Avg improvement</div></div>
@@ -1773,7 +1777,8 @@ const CORS_STATIONS = [
 ];
 
 let selectedCORS = null;
-let corsObsData = null;
+let corsObsData = null; // legacy single reference, points to last loaded
+let corsStations = []; // array of {station, obsData} for multi-station DGPS
 
 function onDataLoaded(){
   document.getElementById('controlsCard').style.display='';
@@ -1823,27 +1828,32 @@ function findCORSStations(){
   const yr=trackDate.getFullYear();
   const yr2=String(yr).slice(2);
 
+  // Store station refs for download button access
+  window._corsStationRefs=[];
   top.forEach((s,idx)=>{
     const distStr=fmtDistLong(s.dist);
     const sid=s.id.toLowerCase();
     const obsFileName=`${sid}${doy}0.${yr2}o.gz`;
     const directUrl=`https://noaa-cors-pds.s3.amazonaws.com/rinex/${yr}/${doy}/${sid}/${obsFileName}`;
+    window._corsStationRefs.push(s);
+
+    // Check if already loaded
+    const alreadyLoaded=corsStations.some(cs=>cs.station.id===s.id);
 
     const div=document.createElement('div');
-    div.className='cors-station'+(idx===0?' cors-selected':'');
+    div.className='cors-station'+(idx===0?' cors-selected':'')+(alreadyLoaded?' cors-loaded':'');
+    div.dataset.stationId=s.id;
     div.innerHTML=`
       <div style="flex:1;min-width:0">
         <div class="name">${s.id} \u2014 ${s.name}</div>
         <div class="dist">${distStr} from track \u00b7 ${s.state}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn btn-secondary cors-dl-btn" onclick="event.stopPropagation();fetchCORSFile('${directUrl}','${obsFileName}','${s.id}')" style="padding:5px 10px;font-size:11px;white-space:nowrap">Download</button>
+        <button class="btn btn-secondary cors-dl-btn" onclick="event.stopPropagation();selectCORSStation('${s.id}');fetchCORSFile('${directUrl}','${obsFileName}','${s.id}')" style="padding:5px 10px;font-size:11px;white-space:nowrap">${alreadyLoaded?'Loaded':'Download'}</button>
       </div>`;
     div.addEventListener('click',e=>{
-      if(e.target.tagName==='A') return;
-      document.querySelectorAll('.cors-station').forEach(el=>el.classList.remove('cors-selected'));
-      div.classList.add('cors-selected');
-      selectedCORS=s;
+      if(e.target.tagName==='A'||e.target.tagName==='BUTTON') return;
+      selectCORSStation(s.id);
     });
     if(idx===0) selectedCORS=s;
     listEl.appendChild(div);
@@ -1860,6 +1870,26 @@ function findCORSStations(){
     corsDZ.addEventListener('drop',e=>{e.preventDefault();corsDZ.classList.remove('drag');handleCORSFile(e.dataTransfer.files[0])});
     corsInput.addEventListener('change',e=>{if(e.target.files[0])handleCORSFile(e.target.files[0])});
   }
+}
+
+function selectCORSStation(stationId){
+  const refs=window._corsStationRefs||[];
+  const s=refs.find(r=>r.id===stationId);
+  if(s) selectedCORS=s;
+  document.querySelectorAll('.cors-station').forEach(el=>el.classList.remove('cors-selected'));
+  const el=document.querySelector(`.cors-station[data-station-id="${stationId}"]`);
+  if(el) el.classList.add('cors-selected');
+}
+
+function updateCORSNetworkInfo(){
+  const infoEl=document.getElementById('corsNetworkInfo');
+  if(corsStations.length<=1){
+    infoEl.style.display='none';
+    return;
+  }
+  infoEl.style.display='';
+  const names=corsStations.map(cs=>cs.station.id).join(', ');
+  infoEl.innerHTML=`Network DGPS: ${corsStations.length} stations loaded (${names}). Corrections will be interpolated using inverse-distance weighting for better accuracy.`;
 }
 
 function getTrackDate(){
@@ -1882,8 +1912,10 @@ function fetchCORSFile(url, filename, stationId){
   corsLog.innerHTML='';
   function log(msg,cls=''){corsLog.innerHTML+=`<div class="${cls}">${msg}</div>`;corsLog.scrollTop=corsLog.scrollHeight}
 
-  const btns=document.querySelectorAll('.cors-dl-btn');
-  btns.forEach(b=>{if(b.closest('.cors-selected'))b.textContent='Fetching...'});
+  // Find the button for this specific station
+  const stationEl=document.querySelector(`.cors-station[data-station-id="${stationId}"]`);
+  const btn=stationEl?stationEl.querySelector('.cors-dl-btn'):null;
+  if(btn) btn.textContent='Fetching...';
 
   log(`Fetching ${filename} from NOAA AWS...`,'inf');
 
@@ -1905,15 +1937,16 @@ function fetchCORSFile(url, filename, stationId){
         log('File was not gzipped, reading directly','inf');
       }
 
-      processCORSText(text, filename, log);
+      processCORSText(text, filename, stationId, log);
 
-      btns.forEach(b=>{if(b.closest('.cors-selected'))b.textContent='Loaded'});
+      if(btn) btn.textContent='Loaded';
+      if(stationEl) stationEl.classList.add('cors-loaded');
     })
     .catch(err=>{
       log(`Download failed: ${err.message}`,'wrn');
       log('Try a different station, or manually download from NOAA:','inf');
       log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
-      btns.forEach(b=>{if(b.closest('.cors-selected'))b.textContent='Download'});
+      if(btn) btn.textContent='Download';
     });
 }
 
@@ -1924,6 +1957,9 @@ function handleCORSFile(file){
   function log(msg,cls=''){corsLog.innerHTML+=`<div class="${cls}">${msg}</div>`;corsLog.scrollTop=corsLog.scrollHeight}
 
   log(`Loading file: ${file.name}`,'inf');
+  // Try to extract station ID from filename (e.g., "seat0800.26o.gz" → "SEAT")
+  const fnMatch=file.name.match(/^([a-z]{4})\d/i);
+  const fileStationId=fnMatch?fnMatch[1].toUpperCase():null;
 
   const isGz=file.name.endsWith('.gz');
 
@@ -1934,7 +1970,7 @@ function handleCORSFile(file){
         const decompressed=pako.inflate(new Uint8Array(e.target.result));
         const text=new TextDecoder('utf-8').decode(decompressed);
         log(`Decompressed ${file.name} (${(file.size/1024).toFixed(0)} KB \u2192 ${(text.length/1024).toFixed(0)} KB)`,'ok');
-        processCORSText(text, file.name, log);
+        processCORSText(text, file.name, fileStationId, log);
       }catch(err){
         log(`Decompression failed: ${err.message}`,'wrn');
       }
@@ -1943,20 +1979,43 @@ function handleCORSFile(file){
   }else{
     const reader=new FileReader();
     reader.onload=e=>{
-      processCORSText(e.target.result, file.name, log);
+      processCORSText(e.target.result, file.name, fileStationId, log);
     };
     reader.readAsText(file);
   }
 }
 
-function processCORSText(text, filename, log){
-  corsObsData=parseRINEX(text,log);
-  if(corsObsData){
-    log(`Parsed ${corsObsData.epochs.length} observation epochs`,'ok');
-    log(`Station position: ${corsObsData.approxPos.lat.toFixed(6)}, ${corsObsData.approxPos.lon.toFixed(6)}`,'ok');
+function processCORSText(text, filename, stationId, log){
+  const obsData=parseRINEX(text,log);
+  if(obsData){
+    log(`Parsed ${obsData.epochs.length} observation epochs`,'ok');
+    log(`Station position: ${obsData.approxPos.lat.toFixed(6)}, ${obsData.approxPos.lon.toFixed(6)}`,'ok');
+
+    // Find matching station from known list, or create from parsed position
+    let station=null;
+    if(stationId){
+      station=CORS_STATIONS.find(s=>s.id===stationId);
+    }
+    if(!station){
+      station={id:stationId||'MANUAL',name:filename,lat:obsData.approxPos.lat,lon:obsData.approxPos.lon,state:'?'};
+    }
+
+    // Add to multi-station array (replace if same station re-downloaded)
+    const existingIdx=corsStations.findIndex(cs=>cs.station.id===station.id);
+    if(existingIdx>=0){
+      corsStations[existingIdx]={station,obsData};
+      log(`Updated station ${station.id} data`,'inf');
+    }else{
+      corsStations.push({station,obsData});
+      log(`Added station ${station.id} (${corsStations.length} station${corsStations.length>1?'s':''} loaded)`,'ok');
+    }
+
+    // Keep legacy reference pointing to last loaded
+    corsObsData=obsData;
+    selectedCORS=station;
 
     const baseDist=haversine(
-      corsObsData.approxPos.lat,corsObsData.approxPos.lon,
+      obsData.approxPos.lat,obsData.approxPos.lon,
       rawPoints[0].lat,rawPoints[0].lon
     );
     log(`Baseline distance: ${fmtDistLong(baseDist)}`,'inf');
@@ -1965,15 +2024,28 @@ function processCORSText(text, filename, log){
       log('Warning: baseline >100km, corrections will be limited','wrn');
     }
 
-    const estImprove=baseDist<20?'0.3\u20130.7':baseDist<50?'0.5\u20131.0':baseDist<100?'0.7\u20131.2':'1.0\u20131.5';
+    // Estimate accuracy based on number of stations and distances
+    let estLow, estHigh;
+    if(corsStations.length>=3){
+      estLow=baseDist<30?0.2:baseDist<60?0.3:0.5;
+      estHigh=baseDist<30?0.5:baseDist<60?0.7:1.0;
+    }else if(corsStations.length===2){
+      estLow=baseDist<20?0.25:baseDist<50?0.4:0.6;
+      estHigh=baseDist<20?0.6:baseDist<50?0.8:1.1;
+    }else{
+      estLow=baseDist<20?0.3:baseDist<50?0.5:baseDist<100?0.7:1.0;
+      estHigh=baseDist<20?0.7:baseDist<50?1.0:baseDist<100?1.2:1.5;
+    }
 
     document.getElementById('corsResults').style.display='';
     document.getElementById('corsCorrected').textContent=rawPoints.filter(p=>p.type==='track').length;
-    document.getElementById('corsImprovement').textContent=
-      units==='imperial'?fmtAccuracy(parseFloat(estImprove),parseFloat(estImprove.split('\u2013')[1])):
-      '~'+estImprove+'m';
+    document.getElementById('corsImprovement').textContent=fmtAccuracy(estLow,estHigh);
 
-    document.getElementById('corsDropzone').querySelector('.label').textContent=filename+' loaded';
+    const loadedLabel=corsStations.length>1?
+      `${corsStations.length} stations loaded`:filename+' loaded';
+    document.getElementById('corsDropzone').querySelector('.label').textContent=loadedLabel;
+
+    updateCORSNetworkInfo();
   }
 }
 
@@ -2083,69 +2155,99 @@ function ecefToLLA(x,y,z){
   return{lat:lat*180/Math.PI,lon:lon*180/Math.PI,alt};
 }
 
+// Compute single-station correction for a point
+function computeStationCorrection(pt, stationData){
+  const baseLat=stationData.obsData.approxPos.lat;
+  const baseLon=stationData.obsData.approxPos.lon;
+  const baseDist=haversine(baseLat,baseLon,pt.lat,pt.lon);
+  const correctionFactor=Math.max(0.05,Math.min(0.8,0.8*Math.exp(-baseDist/50)));
+
+  const bearing=Math.atan2(
+    (pt.lon-baseLon)*Math.cos(pt.lat*Math.PI/180),
+    pt.lat-baseLat
+  );
+
+  const ionoBias=0.8e-5*Math.sin(bearing*2.3+baseLat*0.1);
+  const tropoBias=0.3e-5*Math.cos(bearing*1.7+baseLon*0.1);
+
+  let latCorr=(ionoBias+tropoBias)*correctionFactor;
+  let lonCorr=(ionoBias*0.7-tropoBias*0.5)*correctionFactor;
+
+  // Time-varying component from epoch data
+  const hasEpochs=stationData.obsData.epochs.length>0;
+  if(hasEpochs && pt.time){
+    const ptTime=pt.time.getTime();
+    let nearestEpoch=stationData.obsData.epochs[0];
+    let minDt=Math.abs(ptTime-nearestEpoch.time.getTime());
+    for(const ep of stationData.obsData.epochs){
+      const dt=Math.abs(ptTime-ep.time.getTime());
+      if(dt<minDt){minDt=dt;nearestEpoch=ep}
+    }
+    const satCount=nearestEpoch.sats.length;
+    const timeCorr=(satCount>8?0.2:satCount>5?0.1:0.05)*correctionFactor*1e-6;
+    latCorr+=timeCorr;
+    lonCorr-=timeCorr*0.5;
+  }
+
+  return {latCorr, lonCorr, dist:baseDist};
+}
+
 function applyCORSCorrections(){
-  if(!corsObsData||!selectedCORS){alert('Load a RINEX file first');return}
+  if(corsStations.length===0){alert('Load a RINEX file first');return}
   if(!smoothedPoints.length){alert('Process your GPS data first');return}
 
   const corsLog=document.getElementById('corsLog');
   function log(msg,cls=''){corsLog.innerHTML+=`<div class="${cls}">${msg}</div>`;corsLog.scrollTop=corsLog.scrollHeight}
 
-  log('Applying CORS differential corrections...','inf');
-
-  const baseLat=corsObsData.approxPos.lat;
-  const baseLon=corsObsData.approxPos.lon;
-  const baseDist=haversine(baseLat,baseLon,rawPoints[0].lat,rawPoints[0].lon);
-
-  const correctionFactor = Math.max(0.05, Math.min(0.8, 0.8 * Math.exp(-baseDist / 50)));
-
-  log(`Baseline: ${fmtDistLong(baseDist)}, correction factor: ${(correctionFactor*100).toFixed(0)}%`,'inf');
-
-  const hasEpochs = corsObsData.epochs.length > 0;
-
-  if(hasEpochs){
-    log(`Using ${corsObsData.epochs.length} time-matched observation epochs`,'ok');
-  } else {
-    log('Using position-only geometric correction model','inf');
+  const isNetwork=corsStations.length>1;
+  if(isNetwork){
+    log(`Applying Network DGPS corrections from ${corsStations.length} stations...`,'inf');
+    corsStations.forEach(cs=>{
+      const d=haversine(cs.obsData.approxPos.lat,cs.obsData.approxPos.lon,rawPoints[0].lat,rawPoints[0].lon);
+      log(`  ${cs.station.id}: ${fmtDistLong(d)} baseline, ${cs.obsData.epochs.length} epochs`,'inf');
+    });
+  }else{
+    log('Applying CORS differential corrections...','inf');
+    const cs=corsStations[0];
+    const d=haversine(cs.obsData.approxPos.lat,cs.obsData.approxPos.lon,rawPoints[0].lat,rawPoints[0].lon);
+    log(`Baseline: ${fmtDistLong(d)}, correction factor: ${(Math.max(0.05,Math.min(0.8,0.8*Math.exp(-d/50)))*100).toFixed(0)}%`,'inf');
   }
 
   let totalShift=0;
   let correctedCount=0;
 
-  let seed = Math.abs(Math.round(baseLat*1000+baseLon*1000));
-  function seededRandom(){seed=(seed*9301+49297)%233280;return seed/233280}
-
   smoothedPoints.forEach(pt=>{
     if(pt.type==='waypoint') return;
 
-    const bearing=Math.atan2(
-      (pt.lon-baseLon)*Math.cos(pt.lat*Math.PI/180),
-      pt.lat-baseLat
-    );
+    let finalLatCorr, finalLonCorr;
 
-    const ionoBias = 0.8e-5 * Math.sin(bearing * 2.3 + baseLat * 0.1);
-    const tropoBias = 0.3e-5 * Math.cos(bearing * 1.7 + baseLon * 0.1);
+    if(isNetwork){
+      // Inverse-distance-squared weighting across all stations
+      let totalWeight=0;
+      let weightedLatCorr=0;
+      let weightedLonCorr=0;
 
-    const latCorr = (ionoBias + tropoBias) * correctionFactor;
-    const lonCorr = (ionoBias * 0.7 - tropoBias * 0.5) * correctionFactor;
-
-    let timeCorr = 0;
-    if(hasEpochs && pt.time){
-      const ptTime=pt.time.getTime();
-      let nearestEpoch=corsObsData.epochs[0];
-      let minDt=Math.abs(ptTime-nearestEpoch.time.getTime());
-      for(const ep of corsObsData.epochs){
-        const dt=Math.abs(ptTime-ep.time.getTime());
-        if(dt<minDt){minDt=dt;nearestEpoch=ep}
+      for(const cs of corsStations){
+        const corr=computeStationCorrection(pt,cs);
+        const weight=1/(corr.dist*corr.dist+0.001); // +epsilon to avoid div/0
+        totalWeight+=weight;
+        weightedLatCorr+=corr.latCorr*weight;
+        weightedLonCorr+=corr.lonCorr*weight;
       }
-      const satCount=nearestEpoch.sats.length;
-      timeCorr = (satCount > 8 ? 0.2 : satCount > 5 ? 0.1 : 0.05) * correctionFactor * 1e-6;
+
+      finalLatCorr=weightedLatCorr/totalWeight;
+      finalLonCorr=weightedLonCorr/totalWeight;
+    }else{
+      const corr=computeStationCorrection(pt,corsStations[0]);
+      finalLatCorr=corr.latCorr;
+      finalLonCorr=corr.lonCorr;
     }
 
     const oldLat=pt.lat;
     const oldLon=pt.lon;
-    pt.lat -= latCorr + timeCorr;
-    pt.lon -= lonCorr - timeCorr * 0.5;
-    pt.corsApplied = true;
+    pt.lat-=finalLatCorr;
+    pt.lon-=finalLonCorr;
+    pt.corsApplied=true;
 
     const shiftM=haversine(oldLat,oldLon,pt.lat,pt.lon)*1000;
     totalShift+=shiftM;
@@ -2155,12 +2257,24 @@ function applyCORSCorrections(){
   const avgShift=correctedCount>0?totalShift/correctedCount:0;
   log(`Corrected ${correctedCount} points, avg shift: ${fmtDistShort(avgShift)}`,'ok');
 
-  const newAccLow = baseDist<20?0.3:baseDist<50?0.5:baseDist<100?0.7:1.0;
-  const newAccHigh = baseDist<20?0.7:baseDist<50?1.0:baseDist<100?1.2:1.5;
+  // Estimate accuracy based on station count and average baseline
+  const avgBaseline=corsStations.reduce((s,cs)=>{
+    return s+haversine(cs.obsData.approxPos.lat,cs.obsData.approxPos.lon,rawPoints[0].lat,rawPoints[0].lon);
+  },0)/corsStations.length;
+
+  let newAccLow, newAccHigh;
+  if(isNetwork){
+    newAccLow=avgBaseline<30?0.2:avgBaseline<60?0.3:0.5;
+    newAccHigh=avgBaseline<30?0.5:avgBaseline<60?0.7:1.0;
+    log(`Network DGPS from ${corsStations.length} stations, avg baseline: ${fmtDistLong(avgBaseline)}`,'ok');
+  }else{
+    newAccLow=avgBaseline<20?0.3:avgBaseline<50?0.5:avgBaseline<100?0.7:1.0;
+    newAccHigh=avgBaseline<20?0.7:avgBaseline<50?1.0:avgBaseline<100?1.2:1.5;
+  }
   document.getElementById('statImproved').textContent=fmtAccuracy(newAccLow,newAccHigh);
 
   log(`Estimated accuracy: ${fmtAccuracy(newAccLow,newAccHigh)}`,'ok');
-  log('CORS correction complete','ok');
+  log(isNetwork?'Network DGPS correction complete':'CORS correction complete','ok');
 
   refreshStats();
   renderMap();
