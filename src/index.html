@@ -149,9 +149,9 @@ cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:ce
 #satMap .maplibregl-ctrl-bottom-right,.mapboxgl-ctrl-bottom-right{opacity:.6}
 
 /* Activity profile pills */
-.profile-toggle{display:flex;background:var(--bg);border-radius:var(--radius-sm);padding:3px;gap:2px;flex-wrap:wrap;margin-bottom:12px}
+.profile-toggle{display:flex;background:var(--bg4);border-radius:var(--radius-sm);padding:3px;gap:2px;flex-wrap:wrap;margin-bottom:12px}
 .profile-btn{font-family:var(--font-display);font-size:11px;font-weight:600;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;color:var(--fg3);background:transparent;transition:all .15s;flex:1;text-align:center;min-width:0;white-space:nowrap}
-.profile-btn.active{background:var(--bg3);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.profile-btn.active{background:var(--bg);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .profile-btn.suggested{border:1px solid var(--accent);color:var(--accent)}
 
 /* Advanced toggle */
@@ -565,32 +565,29 @@ dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop',e=>{e.preventDefault();dropzone.classList.remove('drag');handleFiles(e.dataTransfer.files)});
 fileInput.addEventListener('change',e=>handleFiles(e.target.files));
 
-function handleFiles(files){
+async function handleFiles(files){
   for(const f of files){
     if(loadedFiles.some(lf=>lf.name===f.name)){continue}
-    const reader=new FileReader();
-    reader.onload=e=>{
-      const text=e.target.result;
-      let pts;
-      if(f.name.endsWith('.gpx')) pts=parseGPX(text);
-      else pts=parseNMEA(text);
-      if(pts&&pts.length>0){
-        loadedFiles.push({name:f.name,pointCount:pts.length,points:pts});
-        if(!baseFileName) baseFileName=f.name.replace(/\.[^.]+$/,'');
-        rebuildRawPoints();
-        onDataLoaded();
-        // Suggest profile after loading
-        const suggested=suggestProfile(pts);
-        if(suggested){
-          selectProfile(suggested);
-          const el=document.getElementById('profileSuggestion');
-          el.style.display='';
-          el.textContent='Suggested: '+PROFILES[suggested].label+' (based on track speeds)';
-          document.querySelector(`.profile-btn[data-profile="${suggested}"]`).classList.add('suggested');
-        }
+    const text=await f.text();
+    let pts;
+    if(f.name.endsWith('.gpx')) pts=parseGPX(text);
+    else pts=parseNMEA(text);
+    if(pts&&pts.length>0){
+      loadedFiles.push({name:f.name,pointCount:pts.length,points:pts});
+      if(!baseFileName) baseFileName=f.name.replace(/\.[^.]+$/,'');
+      rebuildRawPoints();
+      await new Promise(r=>setTimeout(r,0)); // yield to UI
+      onDataLoaded();
+      // Suggest profile after loading
+      const suggested=suggestProfile(pts);
+      if(suggested){
+        selectProfile(suggested);
+        const el=document.getElementById('profileSuggestion');
+        el.style.display='';
+        el.textContent='Suggested: '+PROFILES[suggested].label+' (based on track speeds)';
+        document.querySelector(`.profile-btn[data-profile="${suggested}"]`).classList.add('suggested');
       }
-    };
-    reader.readAsText(f);
+    }
   }
 }
 
@@ -1194,23 +1191,22 @@ canvas.addEventListener('touchmove',e=>{if(isDragging&&e.touches.length===1){map
 canvas.addEventListener('touchend',()=>isDragging=false);
 
 // Table
-function renderTable(){
-  const body=document.getElementById('pointsBody');
-  body.innerHTML='';
-  smoothedPoints.forEach((pt,i)=>{
+function renderTableRows(pts, startIdx){
+  let html='';
+  pts.forEach((pt,i)=>{
+    const idx=startIdx+i;
     const origDistM=pt.origLat?haversine(pt.lat,pt.lon,pt.origLat,pt.origLon)*1000:0;
     let status=pt.type==='averaged'?`&#8853; ${pt.samples}pt avg`+(pt.stopName?' ('+pt.stopName+')':''):pt.origLat?`Shifted ${fmtDistShort(origDistM)}`:'\u2014';
     if(pt.stopDuration) status+=` ${fmtDuration(pt.stopDuration)}`;
     const improved=pt.type==='averaged'||pt.origLat;
-    // Accuracy column — use HDOP if available
     let accuracy='\u2014';
     if(pt.hdop){
-      const accM=pt.hdop*2.5; // rough CEP estimate
+      const accM=pt.hdop*2.5;
       accuracy=fmtDistShort(accM);
       if(pt.hdop>5) accuracy='<span style="color:var(--warn)">'+accuracy+'</span>';
     }
-    body.innerHTML+=`<tr>
-      <td>${i+1}</td>
+    html+=`<tr>
+      <td>${idx+1}</td>
       <td>${pt.lat.toFixed(7)}</td>
       <td>${pt.lon.toFixed(7)}</td>
       <td>${pt.origLat?pt.origLat.toFixed(7):pt.lat.toFixed(7)}</td>
@@ -1219,6 +1215,26 @@ function renderTable(){
       <td>${accuracy}</td>
     </tr>`;
   });
+  return html;
+}
+
+function renderTable(){
+  const body=document.getElementById('pointsBody');
+  const maxRows=500;
+  if(smoothedPoints.length<=maxRows){
+    body.innerHTML=renderTableRows(smoothedPoints,0);
+  }else{
+    body.innerHTML=renderTableRows(smoothedPoints.slice(0,maxRows),0);
+    body.innerHTML+=`<tr><td colspan="7" style="text-align:center;color:var(--fg3);padding:12px">
+      Showing ${maxRows} of ${smoothedPoints.length} points
+      <button class="btn btn-secondary" onclick="renderFullTable()" style="margin-left:8px;padding:4px 10px;font-size:11px">Show all</button>
+    </td></tr>`;
+  }
+}
+
+function renderFullTable(){
+  const body=document.getElementById('pointsBody');
+  body.innerHTML=renderTableRows(smoothedPoints,0);
 }
 
 // Tabs
