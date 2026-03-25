@@ -488,8 +488,9 @@ function updateVal(id,v){document.getElementById(id).textContent=v}
 // Profile management
 function selectProfile(name){
   currentProfile=name;
-  document.querySelectorAll('.profile-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.profile-btn').forEach(b=>{b.classList.remove('active');b.classList.remove('suggested')});
   document.querySelector(`.profile-btn[data-profile="${name}"]`).classList.add('active');
+  document.getElementById('profileSuggestion').style.display='none';
 
   if(name!=='custom'){
     const p=PROFILES[name];
@@ -514,8 +515,9 @@ function selectProfile(name){
 function markCustomProfile(){
   if(currentProfile!=='custom'){
     currentProfile='custom';
-    document.querySelectorAll('.profile-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.profile-btn').forEach(b=>{b.classList.remove('active');b.classList.remove('suggested')});
     document.querySelector('.profile-btn[data-profile="custom"]').classList.add('active');
+    document.getElementById('profileSuggestion').style.display='none';
   }
 }
 
@@ -1941,48 +1943,57 @@ function getDOY(date){
   return String(Math.floor(diff/oneDay)).padStart(3,'0');
 }
 
-function fetchCORSFile(url, filename, stationId){
+let _corsFetching=false;
+async function fetchCORSFile(url, filename, stationId){
+  if(_corsFetching){
+    const corsLog=document.getElementById('corsLog');
+    corsLog.style.display='';
+    corsLog.innerHTML+=`<div class="wrn">Another download is in progress \u2014 please wait.</div>`;
+    corsLog.scrollTop=corsLog.scrollHeight;
+    return;
+  }
+  _corsFetching=true;
+
   const corsLog=document.getElementById('corsLog');
   corsLog.style.display='';
-  corsLog.innerHTML='';
+  if(corsLog.innerHTML.trim()) corsLog.innerHTML+=`<hr style="border-color:var(--bg3);margin:8px 0">`;
   function log(msg,cls=''){corsLog.innerHTML+=`<div class="${cls}">${msg}</div>`;corsLog.scrollTop=corsLog.scrollHeight}
 
-  // Find the button for this specific station
   const stationEl=document.querySelector(`.cors-station[data-station-id="${stationId}"]`);
   const btn=stationEl?stationEl.querySelector('.cors-dl-btn'):null;
   if(btn) btn.textContent='Fetching...';
 
   log(`Fetching ${filename} from NOAA AWS...`,'inf');
 
-  fetch(url)
-    .then(resp=>{
-      if(!resp.ok) throw new Error(`HTTP ${resp.status} \u2014 file may not exist for this date yet`);
-      return resp.arrayBuffer();
-    })
-    .then(buffer=>{
-      log(`Downloaded ${(buffer.byteLength/1024).toFixed(0)} KB`,'ok');
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status} \u2014 file may not exist for this date yet`);
+    const buffer=await resp.arrayBuffer();
+    log(`Downloaded ${(buffer.byteLength/1024).toFixed(0)} KB`,'ok');
 
-      let text;
-      try{
-        const decompressed=pako.inflate(new Uint8Array(buffer));
-        text=new TextDecoder('utf-8').decode(decompressed);
-        log('Decompressed .gz successfully','ok');
-      }catch(e){
-        text=new TextDecoder('utf-8').decode(buffer);
-        log('File was not gzipped, reading directly','inf');
-      }
+    let text;
+    try{
+      const decompressed=pako.inflate(new Uint8Array(buffer));
+      text=new TextDecoder('utf-8').decode(decompressed);
+      log('Decompressed .gz successfully','ok');
+    }catch(e){
+      text=new TextDecoder('utf-8').decode(buffer);
+      log('File was not gzipped, reading directly','inf');
+    }
 
-      processCORSText(text, filename, stationId, log);
+    processCORSText(text, filename, stationId, log);
 
-      if(btn) btn.textContent='Loaded';
-      if(stationEl) stationEl.classList.add('cors-loaded');
-    })
-    .catch(err=>{
-      log(`Download failed: ${err.message}`,'wrn');
-      log('Try a different station, or manually download from NOAA:','inf');
-      log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
-      if(btn) btn.textContent='Download';
-    });
+    if(btn) btn.textContent='Loaded';
+    if(stationEl) stationEl.classList.add('cors-loaded');
+  }catch(err){
+    log(`Download failed: ${err.message}`,'wrn');
+    log('Try a different station, or manually download from NOAA:','inf');
+    log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
+    if(btn) btn.textContent='Retry';
+  }finally{
+    await new Promise(r=>setTimeout(r,500));
+    _corsFetching=false;
+  }
 }
 
 function handleCORSFile(file){
