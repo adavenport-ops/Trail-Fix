@@ -150,7 +150,7 @@ cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:ce
 
 /* Activity profile pills */
 .profile-toggle{display:flex;background:var(--bg4);border-radius:var(--radius-sm);padding:3px;gap:2px;flex-wrap:wrap;margin-bottom:12px}
-.profile-btn{font-family:var(--font-display);font-size:11px;font-weight:600;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;color:var(--fg3);background:transparent;transition:all .15s;flex:1;text-align:center;min-width:0;white-space:nowrap}
+.profile-btn{font-family:var(--font-display);font-size:11px;font-weight:600;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;color:var(--fg3);background:transparent;transition:all .15s;flex:1;text-align:center;white-space:nowrap;overflow:visible}
 .profile-btn.active{background:var(--bg);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .profile-btn.suggested{border:1px solid var(--accent);color:var(--accent)}
 
@@ -219,8 +219,8 @@ Combine all files into one track
 <div class="profile-toggle" id="profileToggle">
 <button class="profile-btn" data-profile="walk" onclick="selectProfile('walk')">Walk</button>
 <button class="profile-btn" data-profile="mtb" onclick="selectProfile('mtb')">MTB</button>
-<button class="profile-btn" data-profile="dirtbike" onclick="selectProfile('dirtbike')">Dirt bike</button>
-<button class="profile-btn" data-profile="car" onclick="selectProfile('car')">Car/ATV</button>
+<button class="profile-btn" data-profile="dirtbike" onclick="selectProfile('dirtbike')">Dirt Bike</button>
+<button class="profile-btn" data-profile="car" onclick="selectProfile('car')">Car</button>
 <button class="profile-btn" data-profile="custom" onclick="selectProfile('custom')">Custom</button>
 </div>
 <div id="profileSuggestion" style="display:none;font-size:10px;color:var(--accent);margin-bottom:8px;margin-top:-8px"></div>
@@ -427,9 +427,9 @@ let currentProfile = null; // set dynamically after first file load
 // Activity profiles
 const PROFILES = {
   walk:     {speed:15,  smooth:30, stopRadius:2, stopMinPts:10, label:'Walk'},
-  mtb:      {speed:50,  smooth:45, stopRadius:3, stopMinPts:8,  label:'Mountain bike'},
-  dirtbike: {speed:120, smooth:55, stopRadius:5, stopMinPts:5,  label:'Dirt bike'},
-  car:      {speed:180, smooth:60, stopRadius:8, stopMinPts:15, label:'Car/ATV'},
+  mtb:      {speed:50,  smooth:45, stopRadius:3, stopMinPts:8,  label:'MTB'},
+  dirtbike: {speed:120, smooth:55, stopRadius:5, stopMinPts:5,  label:'Dirt Bike'},
+  car:      {speed:180, smooth:60, stopRadius:8, stopMinPts:15, label:'Car'},
   custom:   {speed:80,  smooth:50, stopRadius:5, stopMinPts:5,  label:'Custom'}
 };
 
@@ -1855,7 +1855,7 @@ function findCORSStations(){
     dist:haversine(cLat,cLon,s.lat,s.lon)
   })).sort((a,b)=>a.dist-b.dist);
 
-  const top=withDist.slice(0,5);
+  const top=withDist.slice(0,8);
   const listEl=document.getElementById('corsStationList');
   listEl.innerHTML='';
 
@@ -1897,6 +1897,21 @@ function findCORSStations(){
   });
 
   document.getElementById('corsStations').style.display='';
+
+  // Pre-check station availability via HEAD requests
+  top.forEach(async(s)=>{
+    const sid=s.id.toLowerCase();
+    const obsFileName=`${sid}${doy}0.${yr2}o.gz`;
+    const directUrl=`https://noaa-cors-pds.s3.amazonaws.com/rinex/${yr}/${doy}/${sid}/${obsFileName}`;
+    try{
+      const resp=await fetch(directUrl,{method:'HEAD'});
+      if(!resp.ok){
+        const el=document.querySelector(`.cors-station[data-station-id="${s.id}"]`);
+        const btn=el?.querySelector('.cors-dl-btn');
+        if(btn&&btn.textContent==='Download'){btn.textContent='No data';btn.style.opacity='0.5';btn.disabled=true}
+      }
+    }catch(e){/* silently ignore network errors */}
+  });
 
   if(!window._corsDropSetup){
     window._corsDropSetup=true;
@@ -1986,10 +2001,15 @@ async function fetchCORSFile(url, filename, stationId){
     if(btn) btn.textContent='Loaded';
     if(stationEl) stationEl.classList.add('cors-loaded');
   }catch(err){
-    log(`Download failed: ${err.message}`,'wrn');
-    log('Try a different station, or manually download from NOAA:','inf');
-    log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
-    if(btn) btn.textContent='Retry';
+    if(err.message.includes('404')){
+      log(`${stationId}: No data available for this date`,'wrn');
+      if(btn){btn.textContent='No data';btn.style.opacity='0.5';btn.disabled=true}
+    }else{
+      log(`Download failed: ${err.message}`,'wrn');
+      log('Try a different station, or manually download from NOAA:','inf');
+      log('\u2192 geodesy.noaa.gov/UFCORS/','inf');
+      if(btn) btn.textContent='Retry';
+    }
   }finally{
     await new Promise(r=>setTimeout(r,500));
     _corsFetching=false;
