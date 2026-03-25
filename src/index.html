@@ -217,7 +217,7 @@ Combine all files into one track
 <!-- Activity Profiles -->
 <div style="font-size:11px;color:var(--fg3);margin-bottom:6px">Activity profile</div>
 <div class="profile-toggle" id="profileToggle">
-<button class="profile-btn active" data-profile="walk" onclick="selectProfile('walk')">Walk</button>
+<button class="profile-btn" data-profile="walk" onclick="selectProfile('walk')">Walk</button>
 <button class="profile-btn" data-profile="mtb" onclick="selectProfile('mtb')">MTB</button>
 <button class="profile-btn" data-profile="dirtbike" onclick="selectProfile('dirtbike')">Dirt bike</button>
 <button class="profile-btn" data-profile="car" onclick="selectProfile('car')">Car/ATV</button>
@@ -243,8 +243,8 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Track smoothing strength</label>
 <div class="control-row">
-<input type="range" id="smoothStrength" min="0" max="100" value="30" oninput="updateVal('smoothVal',this.value+'%');markCustomProfile()">
-<span class="range-val" id="smoothVal">30%</span>
+<input type="range" id="smoothStrength" min="0" max="100" value="55" oninput="updateVal('smoothVal',this.value+'%');markCustomProfile()">
+<span class="range-val" id="smoothVal">55%</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Higher = smoother trail, less jitter noise</div>
 </div>
@@ -252,8 +252,8 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Speed filter threshold</label>
 <div class="control-row">
-<input type="range" id="speedFilter" min="0" max="200" value="10" oninput="updateSpeedLabel();markCustomProfile()">
-<span class="range-val" id="speedVal">6 mph</span>
+<input type="range" id="speedFilter" min="0" max="200" value="120" oninput="updateSpeedLabel();markCustomProfile()">
+<span class="range-val" id="speedVal">75 mph</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Discard GPS spikes faster than this</div>
 </div>
@@ -261,8 +261,8 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Stop detection radius</label>
 <div class="control-row">
-<input type="range" id="stopRadiusSlider" min="1" max="20" value="2" oninput="updateVal('stopRadiusVal',this.value+'m');markCustomProfile()">
-<span class="range-val" id="stopRadiusVal">2m</span>
+<input type="range" id="stopRadiusSlider" min="1" max="20" value="5" oninput="updateVal('stopRadiusVal',this.value+'m');markCustomProfile()">
+<span class="range-val" id="stopRadiusVal">5m</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Points within this radius are considered a stop</div>
 </div>
@@ -270,8 +270,8 @@ Combine all files into one track
 <div class="control-group" style="margin-top:12px">
 <label>Minimum stop points</label>
 <div class="control-row">
-<input type="range" id="stopMinPtsSlider" min="3" max="30" value="10" oninput="updateVal('stopMinPtsVal',this.value);markCustomProfile()">
-<span class="range-val" id="stopMinPtsVal">10</span>
+<input type="range" id="stopMinPtsSlider" min="3" max="30" value="5" oninput="updateVal('stopMinPtsVal',this.value);markCustomProfile()">
+<span class="range-val" id="stopMinPtsVal">5</span>
 </div>
 <div style="font-size:11px;color:var(--fg3);margin-top:2px">Minimum readings to count as a stop</div>
 </div>
@@ -422,11 +422,11 @@ let loadedFiles = []; // {name, pointCount, points[]}
 let baseFileName = ''; // first file's name without extension, used for export
 let stopRadius = 2; // meters, for stop detection
 let stopMinPts = 10; // minimum points to count as a stop
-let currentProfile = 'walk';
+let currentProfile = null; // set dynamically after first file load
 
 // Activity profiles
 const PROFILES = {
-  walk:     {speed:10,  smooth:30, stopRadius:2, stopMinPts:10, label:'Walk'},
+  walk:     {speed:15,  smooth:30, stopRadius:2, stopMinPts:10, label:'Walk'},
   mtb:      {speed:50,  smooth:45, stopRadius:3, stopMinPts:8,  label:'Mountain bike'},
   dirtbike: {speed:120, smooth:55, stopRadius:5, stopMinPts:5,  label:'Dirt bike'},
   car:      {speed:180, smooth:60, stopRadius:8, stopMinPts:15, label:'Car/ATV'},
@@ -570,7 +570,7 @@ async function handleFiles(files){
     if(loadedFiles.some(lf=>lf.name===f.name)){continue}
     const text=await f.text();
     let pts;
-    if(f.name.endsWith('.gpx')) pts=parseGPX(text);
+    if(f.name.endsWith('.gpx')) pts=await parseGPXAsync(text);
     else pts=parseNMEA(text);
     if(pts&&pts.length>0){
       loadedFiles.push({name:f.name,pointCount:pts.length,points:pts});
@@ -586,6 +586,9 @@ async function handleFiles(files){
         el.style.display='';
         el.textContent='Suggested: '+PROFILES[suggested].label+' (based on track speeds)';
         document.querySelector(`.profile-btn[data-profile="${suggested}"]`).classList.add('suggested');
+      }else if(!document.querySelector('.profile-btn.active')){
+        // No timestamps to analyze — default to Dirt bike as safe middle ground
+        selectProfile('dirtbike');
       }
     }
   }
@@ -606,87 +609,86 @@ function removeFile(idx){
   onDataLoaded();
 }
 
-function parseGPX(text){
+async function parseGPXAsync(text){
   const parser=new DOMParser();
   const doc=parser.parseFromString(text,'text/xml');
   const pts=[];
 
-  // Track points
-  doc.querySelectorAll('trkpt').forEach(tp=>{
+  // Track points — iterate in chunks to avoid blocking
+  const trkpts=doc.querySelectorAll('trkpt');
+  const total=trkpts.length;
+
+  for(let i=0;i<total;i++){
+    const tp=trkpts[i];
     const lat=parseFloat(tp.getAttribute('lat'));
     const lon=parseFloat(tp.getAttribute('lon'));
+    if(isNaN(lat)||isNaN(lon)) continue;
+
     const ele=tp.querySelector('ele');
     const time=tp.querySelector('time');
-    if(!isNaN(lat)&&!isNaN(lon)){
-      const pt={
-        lat,lon,
-        ele:ele?parseFloat(ele.textContent):null,
-        time:time?new Date(time.textContent):null,
-        type:'track'
+    const pt={
+      lat,lon,
+      ele:ele?parseFloat(ele.textContent):null,
+      time:time?new Date(time.textContent):null,
+      type:'track'
+    };
+
+    // Direct children for accuracy metadata
+    const hdopEl=tp.querySelector('hdop');
+    const pdopEl=tp.querySelector('pdop');
+    const vdopEl=tp.querySelector('vdop');
+    const fixEl=tp.querySelector('fix');
+    const satEl=tp.querySelector('sat');
+    const speedEl=tp.querySelector('speed');
+    if(hdopEl) pt.hdop=parseFloat(hdopEl.textContent);
+    if(pdopEl) pt.pdop=parseFloat(pdopEl.textContent);
+    if(vdopEl) pt.vdop=parseFloat(vdopEl.textContent);
+    if(fixEl) pt.fix=fixEl.textContent;
+    if(satEl) pt.sat=parseInt(satEl.textContent);
+    if(speedEl) pt.gpxSpeed=parseFloat(speedEl.textContent);
+
+    // Extensions block (Garmin gpxtpx:TrackPointExtension style)
+    const ext=tp.querySelector('extensions');
+    if(ext){
+      const tryGet=(names)=>{
+        for(const n of names){
+          const el=ext.querySelector(n);
+          if(el) return el.textContent;
+          for(const child of ext.children){
+            const sub=child.querySelector(n);
+            if(sub) return sub.textContent;
+          }
+        }
+        const all=ext.getElementsByTagName('*');
+        for(const el of all){
+          const local=el.localName||el.tagName.split(':').pop();
+          if(names.includes(local)) return el.textContent;
+        }
+        return null;
       };
-
-      // P2: GPX extension parsing
-      // Direct children
-      const hdopEl=tp.querySelector('hdop');
-      const pdopEl=tp.querySelector('pdop');
-      const vdopEl=tp.querySelector('vdop');
-      const fixEl=tp.querySelector('fix');
-      const satEl=tp.querySelector('sat');
-      const speedEl=tp.querySelector('speed');
-      if(hdopEl) pt.hdop=parseFloat(hdopEl.textContent);
-      if(pdopEl) pt.pdop=parseFloat(pdopEl.textContent);
-      if(vdopEl) pt.vdop=parseFloat(vdopEl.textContent);
-      if(fixEl) pt.fix=fixEl.textContent;
-      if(satEl) pt.sat=parseInt(satEl.textContent);
-      if(speedEl) pt.gpxSpeed=parseFloat(speedEl.textContent);
-
-      // Extensions block (Garmin gpxtpx:TrackPointExtension style)
-      const ext=tp.querySelector('extensions');
-      if(ext){
-        // Try various namespaced and non-namespaced selectors
-        const tryGet=(names)=>{
-          for(const n of names){
-            const el=ext.querySelector(n);
-            if(el) return el.textContent;
-            // Also search children of any sub-element
-            for(const child of ext.children){
-              const sub=child.querySelector(n);
-              if(sub) return sub.textContent;
-            }
-          }
-          // Brute-force: look for element by local name
-          const all=ext.getElementsByTagName('*');
-          for(const el of all){
-            const local=el.localName||el.tagName.split(':').pop();
-            if(names.includes(local)) return el.textContent;
-          }
-          return null;
-        };
-        if(!pt.hdop){const v=tryGet(['hdop']);if(v) pt.hdop=parseFloat(v)}
-        if(!pt.pdop){const v=tryGet(['pdop']);if(v) pt.pdop=parseFloat(v)}
-        if(!pt.vdop){const v=tryGet(['vdop']);if(v) pt.vdop=parseFloat(v)}
-        if(!pt.fix){const v=tryGet(['fix']);if(v) pt.fix=v}
-        if(!pt.sat){const v=tryGet(['sat']);if(v) pt.sat=parseInt(v)}
-        if(!pt.gpxSpeed){const v=tryGet(['speed']);if(v) pt.gpxSpeed=parseFloat(v)}
-      }
-
-      pts.push(pt);
+      if(!pt.hdop){const v=tryGet(['hdop']);if(v) pt.hdop=parseFloat(v)}
+      if(!pt.pdop){const v=tryGet(['pdop']);if(v) pt.pdop=parseFloat(v)}
+      if(!pt.vdop){const v=tryGet(['vdop']);if(v) pt.vdop=parseFloat(v)}
+      if(!pt.fix){const v=tryGet(['fix']);if(v) pt.fix=v}
+      if(!pt.sat){const v=tryGet(['sat']);if(v) pt.sat=parseInt(v)}
+      if(!pt.gpxSpeed){const v=tryGet(['speed']);if(v) pt.gpxSpeed=parseFloat(v)}
     }
-  });
 
-  // Waypoints
+    pts.push(pt);
+
+    // Yield every 500 points to keep UI responsive
+    if(i>0&&i%500===0){
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+
+  // Waypoints (usually few, no chunking needed)
   doc.querySelectorAll('wpt').forEach(wp=>{
     const lat=parseFloat(wp.getAttribute('lat'));
     const lon=parseFloat(wp.getAttribute('lon'));
     const name=wp.querySelector('name');
     if(!isNaN(lat)&&!isNaN(lon)){
-      pts.push({
-        lat,lon,
-        ele:null,
-        time:null,
-        type:'waypoint',
-        name:name?name.textContent:'WPT'
-      });
+      pts.push({lat,lon,ele:null,time:null,type:'waypoint',name:name?name.textContent:'WPT'});
     }
   });
 
@@ -751,6 +753,8 @@ async function processData(){
   processBtn.textContent='Processing...';
   document.querySelector('.header').classList.add('processing');
 
+  try{
+
   const avgWindow=parseInt(document.getElementById('avgWindow').value);
   const smoothStr=parseInt(document.getElementById('smoothStrength').value)/100;
   const speedMax=parseInt(document.getElementById('speedFilter').value);
@@ -802,6 +806,10 @@ async function processData(){
     await new Promise(r=>setTimeout(r,0));
   }
   addLog(`Removed ${removedPoints.length} GPS spikes (>${fmtSpeed(speedMax)})`,'wrn');
+  const trackTotal=rawPoints.filter(p=>p.type==='track').length;
+  if(trackTotal>0&&removedPoints.length/trackTotal>0.8){
+    addLog('Warning: speed filter removed '+Math.round(removedPoints.length/trackTotal*100)+'% of points \u2014 try a faster activity profile','wrn');
+  }
 
   // Step 2: Time-gap break detection
   breakMarkers=[];
@@ -923,14 +931,25 @@ async function processData(){
   renderMap();
   renderTable();
 
-  // Default to satellite map tab — auto-init with free tiles
-  switchTab('satellite',document.querySelector('.tab.active'));
-  initSatMap('free');
+  // Default to satellite map tab — auto-init with free tiles only on first run
+  const satTab=document.querySelector('.tab[onclick*="satellite"]');
+  if(satTab) switchTab('satellite',satTab);
 
-  // Re-enable button
-  processBtn.disabled=false;
-  processBtn.textContent='Process data';
-  document.querySelector('.header').classList.remove('processing');
+  if(!window._satMap){
+    initSatMap('free');
+  }else{
+    refreshSatMap();
+  }
+
+  }catch(err){
+    const log=document.getElementById('processLog');
+    log.innerHTML+=`<div class="wrn">Error during processing: ${err.message}</div>`;
+    console.error('TrailFix processing error:',err);
+  }finally{
+    processBtn.disabled=false;
+    processBtn.textContent='Process data';
+    document.querySelector('.header').classList.remove('processing');
+  }
 }
 
 async function kalmanSmoothAsync(points,strength,addLog){
