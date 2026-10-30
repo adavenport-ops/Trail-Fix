@@ -1,4 +1,6 @@
-# CLAUDE.md — Project context for Claude Code
+# Trail-Fix — AGENTS.md
+
+> Canonical operating context for any agent working on Trail-Fix. Brain surface at `~/Brain/01-Projects/trail-fix/AGENTS.md`. Vanilla JS, no framework, single-HTML-file. Hosted at adavenport.dev/trailfix.
 
 ## What this is
 
